@@ -1,4 +1,4 @@
-//! `covenrt new` — scaffold a new adapter manifest.
+//! `conjure new` — scaffold a new adapter manifest.
 
 use std::fs;
 use std::path::PathBuf;
@@ -63,6 +63,6 @@ pub fn run(args: NewArgs) -> Result<()> {
         .with_context(|| format!("failed to write {}", out.display()))?;
 
     println!("Created {} ({} flavor).", out.display(), args.flavor);
-    println!("Next: edit it, then `covenrt validate {}`.", out.display());
+    println!("Next: edit it, then `conjure validate {}`.", out.display());
     Ok(())
 }

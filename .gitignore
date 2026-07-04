@@ -2,7 +2,7 @@
 /target
 **/*.rs.bk
 *.pdb
-# Cargo.lock IS committed — this workspace ships a binary (covenrt).
+# Cargo.lock IS committed — this workspace ships a binary (conjure).
 
 # macOS
 .DS_Store

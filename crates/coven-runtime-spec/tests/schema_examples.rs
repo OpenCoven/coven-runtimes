@@ -128,7 +128,7 @@ fn schema_accepts_serialized_runtime_adapter() {
     assert_valid(&validator, &instance, "serialized RuntimeAdapter");
 }
 
-/// A `covenrt new --flavor minimal` scaffold (baseline, no additions) must also
+/// A `conjure new --flavor minimal` scaffold (baseline, no additions) must also
 /// satisfy the schema — the common contributor starting point.
 #[test]
 fn schema_accepts_baseline_adapter() {

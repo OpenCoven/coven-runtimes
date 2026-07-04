@@ -1,6 +1,6 @@
 //! Dependency-free SHA-256 (FIPS 180-4).
 //!
-//! Used by `covenrt package` to checksum canonical manifests. Kept in-tree
+//! Used by `conjure package` to checksum canonical manifests. Kept in-tree
 //! rather than pulling a crypto crate so the CLI stays lean and auditable; the
 //! implementation is the standard algorithm and is covered by NIST test
 //! vectors below.

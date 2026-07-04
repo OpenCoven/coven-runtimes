@@ -1,4 +1,4 @@
-//! `covenrt` subcommand implementations.
+//! `conjure` subcommand implementations.
 
 pub mod new;
 pub mod package;

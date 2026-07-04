@@ -1,6 +1,6 @@
-//! `covenrt test` — conformance checks against the runtime binary.
+//! `conjure test` — conformance checks against the runtime binary.
 //!
-//! Validation (`covenrt validate`) is pure and static. This command adds the
+//! Validation (`conjure validate`) is pure and static. This command adds the
 //! *dynamic* checks that need the real runtime present:
 //!
 //! - the declared `executable` resolves on `PATH`;

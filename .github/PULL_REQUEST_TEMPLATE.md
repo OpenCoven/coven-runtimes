@@ -15,12 +15,12 @@
 
 ## If this adds or changes a runtime adapter
 
-- [ ] `covenrt validate <manifest> --verbose` passes with zero problems
+- [ ] `conjure validate <manifest> --verbose` passes with zero problems
 - [ ] Every declared capability is real (no `stream: true` without working `stream_args`, etc.)
 - [ ] `id` is `[a-z0-9._-]+` and doesn't collide with a built-in (`codex`, `claude`)
 - [ ] `install_hint` tells a user how to obtain the binary
 - [ ] If added to the registry index: entry `adapter.id` matches its runtime key and `version` is semver
-- [ ] Ran `covenrt test <manifest>` against the real binary (or noted why it was skipped)
+- [ ] Ran `conjure test <manifest>` against the real binary (or noted why it was skipped)
 
 ## If this changes the SDK
 

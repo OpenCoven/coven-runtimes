@@ -1,4 +1,4 @@
-//! `covenrt package` — emit canonical JSON + checksum for publishing.
+//! `conjure package` — emit canonical JSON + checksum for publishing.
 //!
 //! Validates the manifest, then writes a canonicalized copy (stable key order,
 //! trailing newline) and prints its SHA-256. The checksum is what a registry

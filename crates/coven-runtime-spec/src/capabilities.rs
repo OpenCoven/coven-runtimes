@@ -60,7 +60,7 @@ impl Capabilities {
         self == Self::BASELINE
     }
 
-    /// Stable list of `(name, enabled)` pairs, for diagnostics / `covenrt`
+    /// Stable list of `(name, enabled)` pairs, for diagnostics / `conjure`
     /// output. Order is stable so snapshots and diffs are deterministic.
     pub fn as_pairs(self) -> [(&'static str, bool); 4] {
         [
