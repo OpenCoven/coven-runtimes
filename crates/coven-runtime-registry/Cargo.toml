@@ -1,0 +1,15 @@
+[package]
+name = "coven-runtime-registry"
+version = "0.1.0"
+description = "Versioned index format and resolver for distributing Coven runtime adapters."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+coven-runtime-spec.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true

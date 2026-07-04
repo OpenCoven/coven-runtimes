@@ -1,0 +1,22 @@
+{
+  "format": "1",
+  "runtimes": {
+    "hermes": [
+      {
+        "version": "1.0.0",
+        "published_at": "2026-07-04T00:00:00Z",
+        "adapter": {
+          "id": "hermes",
+          "label": "Hermes Agent",
+          "executable": "hermes",
+          "interactive_prompt_prefix_args": ["chat", "--source", "coven", "-q"],
+          "non_interactive_prompt_prefix_args": ["chat", "--source", "coven", "-Q", "-q"],
+          "install_hint": "Install Hermes Agent, add it to PATH, and complete Hermes setup before using this adapter.",
+          "capabilities": { "stream": false, "preassigned_session_id": false, "think": false, "speed": false },
+          "version": "1.0.0",
+          "description": "A plain one-shot runtime with baseline capabilities."
+        }
+      }
+    ]
+  }
+}

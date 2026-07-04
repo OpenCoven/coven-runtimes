@@ -1,0 +1,33 @@
+{
+  "adapters": [
+    {
+      "id": "claude-example",
+      "label": "Claude Code (reference)",
+      "executable": "claude",
+      "interactive_prompt_prefix_args": [],
+      "non_interactive_prompt_prefix_args": ["--print"],
+      "install_hint": "npm install -g @anthropic-ai/claude-code, then run `claude doctor` and ensure `claude` is on PATH.",
+      "system_prompt_flag": "--append-system-prompt",
+      "model_flag": "--model",
+      "capabilities": {
+        "stream": true,
+        "preassigned_session_id": true,
+        "think": true,
+        "speed": true
+      },
+      "sandbox": {
+        "flag": "--permission-mode",
+        "full": "bypassPermissions",
+        "read_only": "plan"
+      },
+      "stream_args": {
+        "prefix_args": ["-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose"],
+        "session_id_flag": "--session-id",
+        "resume_flag": "--resume"
+      },
+      "version": "1.0.0",
+      "homepage": "https://docs.anthropic.com/claude-code",
+      "description": "Reference adapter proving the capability model expresses everything coven currently hardcodes as `harness_id == \"claude\"` (stream mode, preassigned session id, think, speed, sandbox mapping). Uses id `claude-example` so it does not collide with the built-in `claude` during validation demos."
+    }
+  ]
+}

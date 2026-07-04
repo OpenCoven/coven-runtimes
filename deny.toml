@@ -1,0 +1,31 @@
+# cargo-deny configuration for the CI dependency audit.
+# https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+version = 2
+# Fail on any security advisory or unmaintained-crate warning.
+yanked = "deny"
+
+[licenses]
+version = 2
+# The dependency tree here is small and permissive; keep the allowlist tight.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "Unicode-3.0",
+    "ISC",
+]
+confidence-threshold = 0.9
+
+[bans]
+# Duplicate versions are a warning, not a hard failure, for a young workspace.
+multiple-versions = "warn"
+wildcards = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

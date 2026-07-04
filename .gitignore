@@ -1,0 +1,17 @@
+# Rust
+/target
+**/*.rs.bk
+*.pdb
+# Cargo.lock IS committed — this workspace ships a binary (covenrt).
+
+# macOS
+.DS_Store
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# Local scratch
+/tmp
+/scratch

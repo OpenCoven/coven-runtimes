@@ -1,0 +1,32 @@
+[workspace]
+members = [
+    "crates/coven-runtime-spec",
+    "crates/coven-runtime-cli",
+    "crates/coven-runtime-registry",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+authors = ["Valentina Alexander"]
+repository = "https://github.com/OpenCoven/coven-runtimes"
+rust-version = "1.82"
+
+[workspace.dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+clap = { version = "4", features = ["derive"] }
+tempfile = "3"
+
+# Internal crates reference each other through the workspace. Explicit versions
+# (not bare paths) keep them out of cargo-deny's wildcard ban and make the crates
+# publishable to crates.io later without edits.
+coven-runtime-spec = { path = "crates/coven-runtime-spec", version = "0.1.0" }
+coven-runtime-registry = { path = "crates/coven-runtime-registry", version = "0.1.0" }
+
+[profile.release]
+strip = true
+lto = "thin"

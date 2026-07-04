@@ -1,0 +1,14 @@
+[package]
+name = "coven-runtime-spec"
+version = "0.1.0"
+description = "Runtime adapter manifest schema, capability model, and validation for the Coven runtime SDK."
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
