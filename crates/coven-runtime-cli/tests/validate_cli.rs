@@ -1,4 +1,4 @@
-//! Integration tests for `covenrt validate`, exercising the real binary against
+//! Integration tests for `conjure validate`, exercising the real binary against
 //! temp files. Guards the `--registry` wiring (blocker: registry indexes were
 //! parsed as adapter manifests and always failed) and the manifest/registry
 //! mode split.
@@ -8,9 +8,9 @@ use std::process::Command;
 
 use tempfile::tempdir;
 
-/// Path to the freshly-built `covenrt` binary Cargo hands integration tests.
-fn covenrt() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_covenrt"))
+/// Path to the freshly-built `conjure` binary Cargo hands integration tests.
+fn conjure() -> Command {
+    Command::new(env!("CARGO_BIN_EXE_conjure"))
 }
 
 const MANIFEST_JSON: &str = r#"{
@@ -68,7 +68,7 @@ fn write(dir: &std::path::Path, name: &str, body: &str) -> std::path::PathBuf {
 fn validates_a_plain_manifest() {
     let dir = tempdir().unwrap();
     let path = write(dir.path(), "manifest.json", MANIFEST_JSON);
-    let out = covenrt().arg("validate").arg(&path).output().unwrap();
+    let out = conjure().arg("validate").arg(&path).output().unwrap();
     assert!(
         out.status.success(),
         "stderr: {}",
@@ -81,7 +81,7 @@ fn validates_a_plain_manifest() {
 fn validates_a_registry_index_with_flag() {
     let dir = tempdir().unwrap();
     let path = write(dir.path(), "index.json", REGISTRY_JSON);
-    let out = covenrt()
+    let out = conjure()
         .arg("validate")
         .arg("--registry")
         .arg(&path)
@@ -103,7 +103,7 @@ fn registry_index_without_flag_fails_loudly() {
     // not silently "succeed" with zero adapters.
     let dir = tempdir().unwrap();
     let path = write(dir.path(), "index.json", REGISTRY_JSON);
-    let out = covenrt().arg("validate").arg(&path).output().unwrap();
+    let out = conjure().arg("validate").arg(&path).output().unwrap();
     assert!(!out.status.success());
     assert!(String::from_utf8_lossy(&out.stderr).contains("no adapters"));
 }
@@ -112,7 +112,7 @@ fn registry_index_without_flag_fails_loudly() {
 fn registry_id_key_mismatch_is_rejected() {
     let dir = tempdir().unwrap();
     let path = write(dir.path(), "index.json", REGISTRY_MISMATCH_JSON);
-    let out = covenrt()
+    let out = conjure()
         .arg("validate")
         .arg("--registry")
         .arg(&path)
@@ -124,7 +124,7 @@ fn registry_id_key_mismatch_is_rejected() {
 
 #[test]
 fn missing_file_errors() {
-    let out = covenrt()
+    let out = conjure()
         .arg("validate")
         .arg("/no/such/manifest.json")
         .output()

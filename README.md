@@ -31,7 +31,7 @@ them.
 | Crate | What it is |
 |-------|------------|
 | **`coven-runtime-spec`** | The manifest schema, capability model, sandbox mapping, and validation. Pure types + rules, no I/O. This is the crate `coven` core depends on to replace the hardcoded string checks. |
-| **`coven-runtime-cli`** (`covenrt`) | The authoring toolkit: `new`, `validate`, `test` (conformance probe), `package`. |
+| **`coven-runtime-cli`** (`conjure`) | The authoring toolkit: `new`, `validate`, `test` (conformance probe), `package`. |
 | **`coven-runtime-registry`** | A versioned index format + resolver for distributing adapters (`coven adapter install <name>`). |
 
 Plus [`schema/`](schema) (JSON Schema for editors/CI),
@@ -42,24 +42,24 @@ Plus [`schema/`](schema) (JSON Schema for editors/CI),
 
 ```sh
 # Build the CLI
-cargo build --release           # binary at target/release/covenrt
+cargo build --release           # binary at target/release/conjure
 
 # Scaffold a new runtime adapter
-covenrt new aria                        # minimal one-shot runtime → aria.json
-covenrt new zephyr --flavor streaming   # streaming + sandbox → zephyr.json
+conjure new aria                        # minimal one-shot runtime → aria.json
+conjure new zephyr --flavor streaming   # streaming + sandbox → zephyr.json
 
 # Validate against the shared spec
-covenrt validate aria.json --verbose
+conjure validate aria.json --verbose
 
 # Validate a registry index (every entry + id/key match)
-covenrt validate --registry registry-index.json
+conjure validate --registry registry-index.json
 
 # Conformance-test against the real binary (probes PATH + a --version/--help call)
-covenrt test aria.json
-covenrt test aria.json --skip-binary    # static rules only (CI without the runtime)
+conjure test aria.json
+conjure test aria.json --skip-binary    # static rules only (CI without the runtime)
 
 # Package for publishing (canonical JSON + SHA-256)
-covenrt package aria.json
+conjure package aria.json
 ```
 
 ## The manifest, in one glance
@@ -99,7 +99,7 @@ the validation rules.
 
 Two kinds of contribution, two bars:
 
-- **Adding a runtime** — scaffold a manifest with `covenrt new`, validate it,
+- **Adding a runtime** — scaffold a manifest with `conjure new`, validate it,
   and open a PR. This is the common case and the tooling is built for it.
 - **Changing the SDK crates** — must pass `fmt`, `clippy -D warnings`,
   `test --locked`, and `cargo deny`.

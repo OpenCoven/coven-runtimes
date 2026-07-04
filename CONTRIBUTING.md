@@ -17,20 +17,20 @@ This is the common case, and the tooling is built for it.
 
 ```sh
 # Scaffold a manifest (minimal one-shot, or streaming + sandbox)
-covenrt new my-runtime --flavor minimal
-covenrt new my-runtime --flavor streaming
+conjure new my-runtime --flavor minimal
+conjure new my-runtime --flavor streaming
 
 # Validate it against the shared spec
-covenrt validate my-runtime.json --verbose
+conjure validate my-runtime.json --verbose
 
 # Conformance-test against the real binary on your PATH
-covenrt test my-runtime.json
-covenrt test my-runtime.json --skip-binary   # static rules only (no binary installed)
+conjure test my-runtime.json
+conjure test my-runtime.json --skip-binary   # static rules only (no binary installed)
 ```
 
 **Requirements for a runtime-adapter PR:**
 
-- `covenrt validate <manifest> --verbose` passes with **zero** problems.
+- `conjure validate <manifest> --verbose` passes with **zero** problems.
 - Every declared capability is real:
   - `capabilities.stream` requires a `stream_args` block with non-empty
     `prefix_args`.
@@ -59,7 +59,7 @@ The workspace is three crates:
 | Crate | Responsibility |
 |-------|----------------|
 | `coven-runtime-spec` | Manifest schema, capability model, sandbox mapping, pure validation. No I/O. The crate `coven` core depends on. |
-| `coven-runtime-cli` (`covenrt`) | Authoring toolkit: `new`, `validate`, `test`, `package`. |
+| `coven-runtime-cli` (`conjure`) | Authoring toolkit: `new`, `validate`, `test`, `package`. |
 | `coven-runtime-registry` | Index format + semver resolver. |
 
 **Before you open a PR, every one of these must pass** (it's exactly what CI runs):

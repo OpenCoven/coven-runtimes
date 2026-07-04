@@ -1,7 +1,7 @@
 //! # coven-runtime-registry
 //!
 //! A versioned catalog for distributing Coven runtime adapters, so
-//! `coven adapter install <name>` (and `covenrt`) can resolve a runtime by id
+//! `coven adapter install <name>` (and `conjure`) can resolve a runtime by id
 //! and version instead of everyone hand-copying `*.json` files.
 //!
 //! The registry is a single JSON document ([`RegistryIndex`]) that maps each

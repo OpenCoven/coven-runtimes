@@ -1,4 +1,4 @@
-//! covenrt — author, validate, conformance-test, and package Coven runtime adapters.
+//! conjure — author, validate, conformance-test, and package Coven runtime adapters.
 
 mod commands;
 mod sha256;
@@ -8,10 +8,10 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
-    name = "covenrt",
+    name = "conjure",
     version,
     about = "Author and validate Coven runtime adapters",
-    long_about = "covenrt is the authoring toolkit for the Coven runtime SDK.\n\
+    long_about = "conjure is the authoring toolkit for the Coven runtime SDK.\n\
                   Scaffold a new adapter, validate a manifest against the shared \
                   spec, run conformance checks against the runtime binary, and \
                   package a manifest for publishing to a registry."

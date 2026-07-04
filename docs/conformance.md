@@ -1,7 +1,7 @@
 # Conformance Specification
 
 This is the authoritative field reference and rule set for a Coven runtime
-adapter manifest, as implemented by `coven-runtime-spec`. `covenrt validate`,
+adapter manifest, as implemented by `coven-runtime-spec`. `conjure validate`,
 the registry, and (eventually) `coven` core all enforce these same rules.
 
 Schema version: **1** (`coven_runtime_spec::SCHEMA_VERSION`).
@@ -89,7 +89,7 @@ config.
 
 ## Validation rules (summary)
 
-`covenrt validate` reports **all** problems in one pass:
+`conjure validate` reports **all** problems in one pass:
 
 1. Manifest declares ≥1 adapter.
 2. Adapter ids are unique, well-formed, and not built-in collisions.
@@ -101,9 +101,9 @@ config.
 8. `capabilities.preassigned_session_id` ⇒ `stream_args.session_id_flag`.
 9. `stream_args` present ⇒ `capabilities.stream` true (no dead config).
 
-## Conformance probe (`covenrt test`)
+## Conformance probe (`conjure test`)
 
-Beyond the static rules, `covenrt test` runs **dynamic** checks that need the
+Beyond the static rules, `conjure test` runs **dynamic** checks that need the
 runtime present:
 
 - the `executable` resolves on `PATH`;

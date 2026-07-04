@@ -19,11 +19,11 @@
 //!   `think`, `speed`) that replace the hardcoded string checks.
 //! - [`SandboxMapping`] / [`Permission`] — native permission mapping that
 //!   adapters previously could not express.
-//! - [`validate_manifest`] — pure validation shared by `covenrt`, the registry,
+//! - [`validate_manifest`] — pure validation shared by `conjure`, the registry,
 //!   and (eventually) coven's loader, so one rule set governs everywhere.
 //!
 //! It has no async, no I/O, and no process spawning — just types and rules — so
-//! it can be a dependency of `coven` core, the `covenrt` CLI, and CI alike.
+//! it can be a dependency of `coven` core, the `conjure` CLI, and CI alike.
 
 pub mod capabilities;
 pub mod manifest;

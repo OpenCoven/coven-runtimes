@@ -1,4 +1,4 @@
-//! `covenrt validate` — check a manifest against the shared spec rules.
+//! `conjure validate` — check a manifest against the shared spec rules.
 
 use std::path::PathBuf;
 

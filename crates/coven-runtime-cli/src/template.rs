@@ -1,4 +1,4 @@
-//! Manifest scaffolding templates for `covenrt new`.
+//! Manifest scaffolding templates for `conjure new`.
 
 use coven_runtime_spec::{AdapterManifest, Capabilities, RuntimeAdapter};
 

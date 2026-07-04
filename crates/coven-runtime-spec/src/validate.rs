@@ -11,7 +11,7 @@
 //! - `model_arg_template` must contain the `{model}` placeholder.
 //!
 //! Validation is pure (no filesystem, no process spawning) so it runs anywhere:
-//! `covenrt validate`, coven's loader, and CI all share the same rules.
+//! `conjure validate`, coven's loader, and CI all share the same rules.
 
 use crate::capabilities::Capabilities;
 use crate::manifest::{AdapterManifest, RuntimeAdapter};
@@ -39,7 +39,7 @@ impl std::fmt::Display for ValidationError {
 }
 
 /// Validate an entire manifest. Returns all problems found (not just the first)
-/// so `covenrt validate` can report everything in one pass.
+/// so `conjure validate` can report everything in one pass.
 pub fn validate_manifest(manifest: &AdapterManifest) -> Vec<ValidationError> {
     let mut errors = Vec::new();
 
