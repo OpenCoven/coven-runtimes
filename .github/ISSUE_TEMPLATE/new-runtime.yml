@@ -1,0 +1,54 @@
+name: New runtime adapter
+description: Propose a new runtime (agent CLI) to add to coven-runtimes.
+title: "runtime: <name>"
+labels: ["runtime-adapter"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Proposing a new runtime? Great. The fastest path is to open a PR with a
+        validated manifest (`covenrt new … && covenrt validate …`). Use this
+        issue if you want to discuss the runtime first, or you're requesting one
+        you can't author yourself.
+  - type: input
+    id: runtime-name
+    attributes:
+      label: Runtime name / id
+      description: The proposed adapter id (lowercase [a-z0-9._-], not codex/claude).
+      placeholder: aria
+    validations:
+      required: true
+  - type: input
+    id: executable
+    attributes:
+      label: Executable
+      description: The bare command name the runtime installs on PATH.
+      placeholder: aria
+    validations:
+      required: true
+  - type: input
+    id: install
+    attributes:
+      label: How is it installed?
+      description: The command or link a user follows to get the binary.
+      placeholder: "npm install -g @acme/aria"
+    validations:
+      required: true
+  - type: checkboxes
+    id: capabilities
+    attributes:
+      label: Declared capabilities
+      description: Only check what the runtime can actually honor.
+      options:
+        - label: "stream (long-lived stream-json mode)"
+        - label: "preassigned_session_id (accepts a session id at launch)"
+        - label: "think (extended-thinking / high-effort toggle)"
+        - label: "speed (fast/balanced/thorough selection)"
+        - label: "sandbox (maps a permission policy to a native flag)"
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything else
+      description: Model selection, quirks, links to the runtime's CLI docs.
+    validations:
+      required: false

@@ -1,0 +1,44 @@
+name: Bug report
+description: Something in the SDK, CLI, or an adapter is behaving wrong.
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - coven-runtime-cli (covenrt)
+        - coven-runtime-spec (schema / validation)
+        - coven-runtime-registry
+        - An adapter manifest
+        - Docs / CI
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what went wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Repro
+      description: Exact commands. Include the manifest if relevant.
+      render: shell
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: covenrt version / commit
+      description: Output of `covenrt --version` or the commit SHA.
+    validations:
+      required: false

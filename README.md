@@ -95,6 +95,19 @@ Field names are snake_case-canonical with camelCase aliases, so both
 [`docs/conformance.md`](docs/conformance.md) for the full field reference and
 the validation rules.
 
+## Contributing
+
+Two kinds of contribution, two bars:
+
+- **Adding a runtime** — scaffold a manifest with `covenrt new`, validate it,
+  and open a PR. This is the common case and the tooling is built for it.
+- **Changing the SDK crates** — must pass `fmt`, `clippy -D warnings`,
+  `test --locked`, and `cargo deny`.
+
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full checklist, and open a
+[New runtime adapter](.github/ISSUE_TEMPLATE/new-runtime.yml) issue if you want
+to discuss a runtime before authoring it.
+
 ## Development
 
 ```sh
