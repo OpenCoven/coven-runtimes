@@ -12,3 +12,11 @@ rust-version.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[dev-dependencies]
+# Drift guard only: validate the shipped JSON Schema against the example
+# manifests in tests. Never compiled into downstream builds of this crate.
+# `default-features = false` drops remote `$ref` resolution (reqwest/hyper/
+# rustls/tokio) — the schema is self-contained, so offline validation is all
+# we need and it keeps the dependency-audit surface small.
+jsonschema = { version = "0.46", default-features = false }
