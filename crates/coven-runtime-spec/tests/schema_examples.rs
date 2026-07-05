@@ -49,7 +49,11 @@ fn assert_valid(validator: &jsonschema::Validator, instance: &Value, label: &str
 #[test]
 fn schema_accepts_example_manifests() {
     let validator = manifest_schema();
-    for name in ["examples/hermes.json", "examples/claude.json"] {
+    for name in [
+        "examples/hermes.json",
+        "examples/claude.json",
+        "examples/opencode.json",
+    ] {
         let instance = load_json(name);
         assert_valid(&validator, &instance, name);
     }

@@ -1,0 +1,24 @@
+{
+  "adapters": [
+    {
+      "id": "opencode",
+      "label": "OpenCode",
+      "executable": "opencode",
+      "interactive_prompt_prefix_args": [],
+      "non_interactive_prompt_prefix_args": ["run"],
+      "install_hint": "Install OpenCode (https://opencode.ai/docs/cli) and ensure `opencode` resolves on PATH. Verify with `opencode --version`.",
+      "system_prompt_flag": null,
+      "model_flag": "--model",
+      "model_arg_template": null,
+      "capabilities": {
+        "stream": false,
+        "preassigned_session_id": false,
+        "think": false,
+        "speed": false
+      },
+      "version": "0.1.0",
+      "homepage": "https://opencode.ai",
+      "description": "OpenCode runtime adapter for Coven. Drives `opencode run` in non-interactive mode; system prompts and tools are configured via the OpenCode project config (AGENTS.md / opencode.json), not via CLI flags."
+    }
+  ]
+}
