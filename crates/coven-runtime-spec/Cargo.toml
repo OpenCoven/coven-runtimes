@@ -1,6 +1,6 @@
 [package]
 name = "coven-runtime-spec"
-version = "0.1.0"
+version = "0.1.1"
 description = "Runtime adapter manifest schema, capability model, and validation for the Coven runtime SDK."
 edition.workspace = true
 license.workspace = true
