@@ -19,7 +19,9 @@
 - [ ] Every declared capability is real (no `stream: true` without working `stream_args`, etc.)
 - [ ] `id` is `[a-z0-9._-]+` and doesn't collide with a built-in (`codex`, `claude`)
 - [ ] `install_hint` tells a user how to obtain the binary
-- [ ] If added to the registry index: entry `adapter.id` matches its runtime key and `version` is semver
+- [ ] Source is at `registry/runtimes/<id>/<version>.json` (one adapter, `version` = filename)
+- [ ] Ran `conjure registry build` so the committed index is in sync (`registry check` is green)
+- [ ] Not editing a released version in place — new content ships as a new version
 - [ ] Ran `conjure test <manifest>` against the real binary (or noted why it was skipped)
 
 ## If this changes the SDK

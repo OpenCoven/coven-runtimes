@@ -6,10 +6,12 @@ body:
   - type: markdown
     attributes:
       value: |
-        Proposing a new runtime? Great. The fastest path is to open a PR with a
-        validated manifest (`conjure new … && conjure validate …`). Use this
-        issue if you want to discuss the runtime first, or you're requesting one
-        you can't author yourself.
+        Proposing a new runtime? Great. The fastest path is to open a PR that
+        adds it to the canonical registry
+        (`conjure new … && conjure validate … && conjure registry add …`);
+        merging it under `registry/runtimes/` is what makes it *accepted*
+        (see GOVERNANCE.md). Use this issue if you want to discuss the runtime
+        first, or you're requesting one you can't author yourself.
   - type: input
     id: runtime-name
     attributes:

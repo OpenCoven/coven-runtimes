@@ -1,0 +1,24 @@
+# Code owners — the approval gate for the canonical runtime registry.
+#
+# In this repo, a runtime is *accepted* when its manifest is merged under
+# `registry/runtimes/`. Requiring code-owner review on that path (plus branch
+# protection with "Require review from Code Owners" enabled) is what makes a
+# merge equivalent to approval. See GOVERNANCE.md.
+#
+# NOTE for repo admins: replace the placeholder owner below with a real team or
+# user handle, and enable the branch-protection rule so this is enforced.
+
+# The accepted-runtime source manifests: acceptance decisions live here.
+/registry/                              @OpenCoven/runtime-maintainers
+
+# The compiled index is generated — guard it so it can only change via a rebuild
+# reviewed alongside its source manifest.
+/crates/coven-runtime-registry/canonical/  @OpenCoven/runtime-maintainers
+
+# The SDK crates and shared spec/schema.
+/crates/                                @OpenCoven/runtime-maintainers
+/schema/                                @OpenCoven/runtime-maintainers
+
+# Governance, acceptance criteria, and the release/publish pipeline.
+/GOVERNANCE.md                          @OpenCoven/runtime-maintainers
+/.github/                               @OpenCoven/runtime-maintainers

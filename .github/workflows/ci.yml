@@ -28,6 +28,11 @@ jobs:
       - name: Clippy
         if: runner.os == 'Linux'
         run: cargo clippy --workspace --all-targets -- -D warnings
+      # Fail fast with a clear message if the canonical index drifted from its
+      # source manifests (also covered by the drift-guard test below).
+      - name: Registry index in sync
+        if: runner.os == 'Linux'
+        run: cargo run -p coven-runtime-cli -- registry check
       - name: Test
         run: cargo test --workspace --locked
 

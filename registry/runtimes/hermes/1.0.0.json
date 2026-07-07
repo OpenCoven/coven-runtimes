@@ -1,0 +1,21 @@
+{
+  "adapters": [
+    {
+      "id": "hermes",
+      "label": "Hermes Agent",
+      "executable": "hermes",
+      "interactive_prompt_prefix_args": ["chat", "--source", "coven", "-q"],
+      "non_interactive_prompt_prefix_args": ["chat", "--source", "coven", "-Q", "-q"],
+      "install_hint": "Install Hermes Agent, add it to PATH, and complete Hermes setup before using this adapter.",
+      "system_prompt_flag": null,
+      "capabilities": {
+        "stream": false,
+        "preassigned_session_id": false,
+        "think": false,
+        "speed": false
+      },
+      "version": "1.0.0",
+      "description": "Reference adapter — mirrors coven's built-in Hermes recipe. A plain one-shot runtime with baseline capabilities."
+    }
+  ]
+}

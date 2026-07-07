@@ -26,7 +26,15 @@ conjure validate my-runtime.json --verbose
 # Conformance-test against the real binary on your PATH
 conjure test my-runtime.json
 conjure test my-runtime.json --skip-binary   # static rules only (no binary installed)
+
+# Accept it into the canonical registry: copies to registry/runtimes/<id>/<version>.json
+# and recompiles the committed index. (Requires a `version` in the manifest.)
+conjure registry add my-runtime.json
 ```
+
+Getting the manifest **merged under `registry/runtimes/`** is what makes the
+runtime *accepted*. The acceptance bar lives in [`GOVERNANCE.md`](GOVERNANCE.md);
+how the list is stored and rebuilt is in [`docs/registry.md`](docs/registry.md).
 
 **Requirements for a runtime-adapter PR:**
 
@@ -39,8 +47,11 @@ conjure test my-runtime.json --skip-binary   # static rules only (no binary inst
 - The `id` is lowercase `[a-z0-9._-]+` and does not collide with a built-in
   (`codex`, `claude`).
 - `install_hint` tells a user exactly how to get the binary.
-- If you're adding it to the registry index, the entry's `adapter.id` matches
-  its runtime key and the `version` is semver (`major.minor.patch`).
+- The source is at `registry/runtimes/<id>/<version>.json` (one adapter,
+  `version` = filename stem) and you ran `conjure registry build` so the
+  committed index is in sync — CI's `registry check` drift guard enforces this.
+- Released versions are immutable: to change a runtime, add a **new** version
+  file rather than editing a published one.
 
 See [`docs/conformance.md`](docs/conformance.md) for the full field reference and
 every validation rule, and [`examples/`](examples) for dogfooded manifests
@@ -59,8 +70,8 @@ The workspace is three crates:
 | Crate | Responsibility |
 |-------|----------------|
 | `coven-runtime-spec` | Manifest schema, capability model, sandbox mapping, pure validation. No I/O. The crate `coven` core depends on. |
-| `coven-runtime-cli` (`conjure`) | Authoring toolkit: `new`, `validate`, `test`, `package`. |
-| `coven-runtime-registry` | Index format + semver resolver. |
+| `coven-runtime-cli` (`conjure`) | Authoring toolkit: `new`, `validate`, `test`, `package`, and `registry` (build/check/add/list/yank). |
+| `coven-runtime-registry` | Index format + semver resolver, and the embedded canonical accepted list (`RegistryIndex::canonical()`). |
 
 **Before you open a PR, every one of these must pass** (it's exactly what CI runs):
 

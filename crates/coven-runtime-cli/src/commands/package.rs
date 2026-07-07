@@ -12,7 +12,7 @@ use anyhow::{bail, Context, Result};
 use clap::Args;
 use coven_runtime_spec::validate_manifest;
 
-use super::load_manifest;
+use super::{canonical_manifest, load_manifest};
 use crate::sha256::sha256_hex;
 
 #[derive(Args)]
@@ -42,8 +42,9 @@ pub fn run(args: PackageArgs) -> Result<()> {
     }
 
     // Canonical form: pretty JSON from the parsed model (drops unknown fields,
-    // normalizes ordering) + trailing newline.
-    let canonical = format!("{}\n", manifest.to_json_pretty().context("serialize")?);
+    // normalizes ordering) + trailing newline. Shared with `registry build` so
+    // a source manifest and its registry entry hash to the same digest.
+    let canonical = canonical_manifest(&manifest)?;
     let digest = sha256_hex(canonical.as_bytes());
 
     if args.check_only {

@@ -1,6 +1,7 @@
 //! conjure — author, validate, conformance-test, and package Coven runtime adapters.
 
 mod commands;
+mod datetime;
 mod sha256;
 mod template;
 
@@ -31,6 +32,8 @@ enum Command {
     Test(commands::test::TestArgs),
     /// Package a validated manifest for publishing (canonical JSON + checksum).
     Package(commands::package::PackageArgs),
+    /// Maintain the canonical registry of accepted runtimes (build/check/add/list/yank).
+    Registry(commands::registry::RegistryArgs),
 }
 
 fn main() -> anyhow::Result<()> {
@@ -40,5 +43,6 @@ fn main() -> anyhow::Result<()> {
         Command::Validate(args) => commands::validate::run(args),
         Command::Test(args) => commands::test::run(args),
         Command::Package(args) => commands::package::run(args),
+        Command::Registry(args) => commands::registry::run(args),
     }
 }
