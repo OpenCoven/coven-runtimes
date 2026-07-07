@@ -7,7 +7,8 @@
 //!
 //! - `capabilities.stream` requires `stream_args`.
 //! - `capabilities.preassigned_session_id` requires `stream_args.session_id_flag`.
-//! - a `sandbox` mapping must have a non-empty flag and both values.
+//! - a `sandbox` mapping must have a non-empty flag and both values (flag
+//!   form), or a non-empty argv list per policy (args form).
 //! - `model_arg_template` must contain the `{model}` placeholder.
 //!
 //! Validation is pure (no filesystem, no process spawning) so it runs anywhere:
@@ -15,6 +16,7 @@
 
 use crate::capabilities::Capabilities;
 use crate::manifest::{AdapterManifest, RuntimeAdapter};
+use crate::sandbox::SandboxMapping;
 
 /// Ids reserved by coven's built-in harnesses. A manifest adapter may not
 /// reuse these (mirrors coven's built-in-collision check).
@@ -134,24 +136,50 @@ fn validate_adapter_into(adapter: &RuntimeAdapter, errors: &mut Vec<ValidationEr
     }
 
     // ── sandbox mapping ─────────────────────────────────────────────────────
-    if let Some(sandbox) = &adapter.sandbox {
-        if sandbox.flag.trim().is_empty() {
-            errors.push(err(tag(), "sandbox.flag", "sandbox flag must not be empty"));
+    match &adapter.sandbox {
+        Some(SandboxMapping::Flag {
+            flag,
+            full,
+            read_only,
+        }) => {
+            if flag.trim().is_empty() {
+                errors.push(err(tag(), "sandbox.flag", "sandbox flag must not be empty"));
+            }
+            if full.trim().is_empty() {
+                errors.push(err(
+                    tag(),
+                    "sandbox.full",
+                    "sandbox `full` value must not be empty",
+                ));
+            }
+            if read_only.trim().is_empty() {
+                errors.push(err(
+                    tag(),
+                    "sandbox.read_only",
+                    "sandbox `read_only` value must not be empty",
+                ));
+            }
         }
-        if sandbox.full.trim().is_empty() {
-            errors.push(err(
-                tag(),
-                "sandbox.full",
-                "sandbox `full` value must not be empty",
-            ));
+        Some(SandboxMapping::Args {
+            full_args,
+            read_only_args,
+        }) => {
+            if full_args.iter().all(|t| t.trim().is_empty()) {
+                errors.push(err(
+                    tag(),
+                    "sandbox.full_args",
+                    "sandbox `full_args` must contain at least one non-empty token",
+                ));
+            }
+            if read_only_args.iter().all(|t| t.trim().is_empty()) {
+                errors.push(err(
+                    tag(),
+                    "sandbox.read_only_args",
+                    "sandbox `read_only_args` must contain at least one non-empty token",
+                ));
+            }
         }
-        if sandbox.read_only.trim().is_empty() {
-            errors.push(err(
-                tag(),
-                "sandbox.read_only",
-                "sandbox `read_only` value must not be empty",
-            ));
-        }
+        None => {}
     }
 
     // ── capability cross-checks ───────────────────────────────────────────
@@ -355,9 +383,9 @@ mod tests {
     }
 
     #[test]
-    fn sandbox_requires_non_empty_values() {
+    fn sandbox_flag_form_requires_non_empty_values() {
         let mut a = base_adapter("x");
-        a.sandbox = Some(SandboxMapping {
+        a.sandbox = Some(SandboxMapping::Flag {
             flag: "".into(),
             full: "".into(),
             read_only: "".into(),
@@ -366,6 +394,32 @@ mod tests {
         assert!(errs.iter().any(|e| e.field == "sandbox.flag"));
         assert!(errs.iter().any(|e| e.field == "sandbox.full"));
         assert!(errs.iter().any(|e| e.field == "sandbox.read_only"));
+    }
+
+    #[test]
+    fn sandbox_args_form_requires_non_empty_lists() {
+        let mut a = base_adapter("x");
+        a.sandbox = Some(SandboxMapping::Args {
+            full_args: vec![],
+            read_only_args: vec!["  ".into()],
+        });
+        let errs = validate_adapter(&a);
+        assert!(errs.iter().any(|e| e.field == "sandbox.full_args"));
+        assert!(errs.iter().any(|e| e.field == "sandbox.read_only_args"));
+    }
+
+    #[test]
+    fn sandbox_args_form_valid_passes() {
+        let mut a = base_adapter("copilot-test");
+        a.sandbox = Some(SandboxMapping::Args {
+            full_args: vec!["--allow-all".into()],
+            read_only_args: vec!["--deny-tool".into(), "write".into()],
+        });
+        assert!(
+            validate_adapter(&a).is_empty(),
+            "{:?}",
+            validate_adapter(&a)
+        );
     }
 
     #[test]

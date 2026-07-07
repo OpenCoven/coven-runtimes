@@ -74,16 +74,45 @@
       }
     },
     "sandbox": {
-      "type": "object",
-      "required": ["flag", "full"],
-      "additionalProperties": false,
-      "description": "Maps a permission policy to the runtime's native sandbox flag.",
-      "properties": {
-        "flag": { "type": "string", "minLength": 1 },
-        "full": { "type": "string", "minLength": 1 },
-        "read_only": { "type": "string", "minLength": 1 },
-        "readOnly": { "type": "string", "minLength": 1 }
-      }
+      "description": "Maps a permission policy to the runtime's native sandbox args. Two forms: a single `--flag value` pair per policy (Codex, Claude), or a whole argv list per policy for runtimes with boolean/repeatable permission flags (GitHub Copilot CLI).",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": ["flag", "full"],
+          "additionalProperties": false,
+          "description": "Flag form: one flag, one value per policy.",
+          "anyOf": [
+            { "required": ["read_only"] },
+            { "required": ["readOnly"] },
+            { "required": ["read-only"] }
+          ],
+          "properties": {
+            "flag": { "type": "string", "minLength": 1 },
+            "full": { "type": "string", "minLength": 1 },
+            "read_only": { "type": "string", "minLength": 1 },
+            "readOnly": { "type": "string", "minLength": 1 },
+            "read-only": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "required": [],
+          "additionalProperties": false,
+          "description": "Args form: a full argv list per policy (e.g. Copilot's `--allow-all` / `--deny-tool write --deny-tool shell`).",
+          "anyOf": [
+            { "required": ["full_args", "read_only_args"] },
+            { "required": ["fullArgs", "readOnlyArgs"] },
+            { "required": ["full_args", "readOnlyArgs"] },
+            { "required": ["fullArgs", "read_only_args"] }
+          ],
+          "properties": {
+            "full_args": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "fullArgs": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "read_only_args": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+            "readOnlyArgs": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+          }
+        }
+      ]
     },
     "streamArgs": {
       "type": "object",

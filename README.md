@@ -3,7 +3,8 @@
 **The runtime SDK, conformance toolkit, and registry for the Coven.**
 
 A *runtime* is an agent CLI the Coven drives to do work — today those are Codex,
-Claude Code, and Hermes. `coven-runtimes` is how you add a new one **without
+Claude Code, and Hermes, with [GitHub Copilot CLI](examples/copilot.json) as a
+manifest-defined reference. `coven-runtimes` is how you add a new one **without
 editing `coven` core**: declare what the runtime can do in a validated manifest,
 conformance-test it against the real binary, and get it accepted into the
 **canonical registry** that every downstream repo adopts.
@@ -107,7 +108,10 @@ JSON — every field coven reads today is unchanged; the additions are
 ```
 
 Field names are snake_case-canonical with camelCase aliases, so both
-`prefix_args` and `prefixArgs` parse. See
+`prefix_args` and `prefixArgs` parse. `sandbox` also accepts an argv-list form
+(`{ "full_args": ["--allow-all"], "read_only_args": ["--deny-tool", "write"] }`)
+for runtimes whose permission flags are boolean/repeatable — see the
+[GitHub Copilot CLI reference manifest](examples/copilot.json). See
 [`docs/conformance.md`](docs/conformance.md) for the full field reference and
 the validation rules.
 
