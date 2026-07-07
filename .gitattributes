@@ -1,0 +1,10 @@
+# Enforce LF line endings for all text files on every platform.
+#
+# The canonical registry index
+# (crates/coven-runtime-registry/canonical/index.json) is byte-compared by the
+# `committed_index_matches_sources` drift-guard test against the output of
+# `conjure registry build`, which always writes LF. Without this, a Windows
+# checkout (autocrlf) would rewrite the index to CRLF and fail the test
+# spuriously. Pinning LF also keeps the embedded index bytes / SHA-256 identical
+# across platforms.
+* text=auto eol=lf
