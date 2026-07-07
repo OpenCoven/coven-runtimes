@@ -144,7 +144,9 @@ fn soft_flag_warnings(adapter: &RuntimeAdapter, probe_output: &str) -> Vec<Strin
         check(f, "model");
     }
     if let Some(s) = &adapter.sandbox {
-        check(&s.flag, "sandbox");
+        for flag in s.probe_flags() {
+            check(flag, "sandbox");
+        }
     }
     warnings
 }
@@ -166,7 +168,7 @@ mod tests {
             model_flag: Some("--model".into()),
             model_arg_template: None,
             capabilities: Capabilities::BASELINE,
-            sandbox: Some(SandboxMapping {
+            sandbox: Some(SandboxMapping::Flag {
                 flag: "--sandbox".into(),
                 full: "full".into(),
                 read_only: "read-only".into(),

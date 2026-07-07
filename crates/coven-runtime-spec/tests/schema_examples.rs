@@ -49,7 +49,11 @@ fn assert_valid(validator: &jsonschema::Validator, instance: &Value, label: &str
 #[test]
 fn schema_accepts_example_manifests() {
     let validator = manifest_schema();
-    for name in ["examples/hermes.json", "examples/claude.json"] {
+    for name in [
+        "examples/hermes.json",
+        "examples/claude.json",
+        "examples/copilot.json",
+    ] {
         let instance = load_json(name);
         assert_valid(&validator, &instance, name);
     }
@@ -107,7 +111,7 @@ fn schema_accepts_serialized_runtime_adapter() {
             think: true,
             speed: true,
         },
-        sandbox: Some(SandboxMapping {
+        sandbox: Some(SandboxMapping::Flag {
             flag: "--permission-mode".into(),
             full: "bypassPermissions".into(),
             read_only: "plan".into(),
@@ -126,6 +130,58 @@ fn schema_accepts_serialized_runtime_adapter() {
     };
     let instance = serde_json::to_value(&manifest).unwrap();
     assert_valid(&validator, &instance, "serialized RuntimeAdapter");
+}
+
+/// The args-form sandbox (per-policy argv lists, used by the Copilot adapter)
+/// must also survive serialization → schema validation.
+#[test]
+fn schema_accepts_args_form_sandbox_adapter() {
+    let validator = manifest_schema();
+    let adapter = RuntimeAdapter {
+        id: "copilot-like".into(),
+        label: "Copilot-like".into(),
+        executable: "copilot".into(),
+        interactive_prompt_prefix_args: vec!["-i".into()],
+        non_interactive_prompt_prefix_args: vec!["-s".into(), "-p".into()],
+        install_hint: "Install the runtime and add it to PATH.".into(),
+        system_prompt_flag: None,
+        model_flag: Some("--model".into()),
+        model_arg_template: None,
+        capabilities: Capabilities {
+            stream: true,
+            preassigned_session_id: true,
+            think: false,
+            speed: false,
+        },
+        sandbox: Some(SandboxMapping::Args {
+            full_args: vec!["--allow-all".into()],
+            read_only_args: vec![
+                "--deny-tool".into(),
+                "write".into(),
+                "--deny-tool".into(),
+                "shell".into(),
+            ],
+        }),
+        stream_args: Some(StreamArgs {
+            prefix_args: vec![
+                "--output-format".into(),
+                "json".into(),
+                "--stream".into(),
+                "on".into(),
+                "-p".into(),
+            ],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        }),
+        version: Some("1.0.0".into()),
+        homepage: None,
+        description: None,
+    };
+    let manifest = AdapterManifest {
+        adapters: vec![adapter],
+    };
+    let instance = serde_json::to_value(&manifest).unwrap();
+    assert_valid(&validator, &instance, "args-form sandbox adapter");
 }
 
 /// A `conjure new --flavor minimal` scaffold (baseline, no additions) must also

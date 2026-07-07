@@ -46,6 +46,11 @@ map a sandbox without editing core Rust.
    `capabilities { stream, preassigned_session_id, think, speed }` all true with
    the matching `stream_args`; Codex stays baseline.
 5. `into_spec` maps the manifest's `sandbox` through instead of forcing `None`.
+   Note the spec's `SandboxMapping` has two forms — the `--flag value` pair
+   (Codex, Claude) and a per-policy argv list (GitHub Copilot CLI's
+   `--allow-all` / `--deny-tool …`) — so core should consume
+   `SandboxMapping::args(permission)` (a `Vec<String>`) rather than assuming a
+   two-token `[flag, value]` shape.
 
 Because the manifest is a **backward-compatible superset** of coven's current
 adapter JSON (same field names, same camelCase aliases), existing `*.json`

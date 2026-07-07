@@ -60,7 +60,7 @@ pub fn scaffold(id: &str, flavor: Flavor) -> AdapterManifest {
                 think: true,
                 speed: true,
             },
-            sandbox: Some(coven_runtime_spec::SandboxMapping {
+            sandbox: Some(coven_runtime_spec::SandboxMapping::Flag {
                 flag: "--permission-mode".into(),
                 full: "bypassPermissions".into(),
                 read_only: "plan".into(),

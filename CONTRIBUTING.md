@@ -44,7 +44,7 @@ conjure test my-runtime.json --skip-binary   # static rules only (no binary inst
 
 See [`docs/conformance.md`](docs/conformance.md) for the full field reference and
 every validation rule, and [`examples/`](examples) for dogfooded manifests
-(`hermes.json`, `claude.json`).
+(`hermes.json`, `claude.json`, `copilot.json`).
 
 **Do not** declare a capability the runtime can't actually honor. The point of
 the manifest is that `coven` trusts it; a false `stream: true` will hang a real
