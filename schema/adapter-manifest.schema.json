@@ -81,11 +81,17 @@
           "required": ["flag", "full"],
           "additionalProperties": false,
           "description": "Flag form: one flag, one value per policy.",
+          "anyOf": [
+            { "required": ["read_only"] },
+            { "required": ["readOnly"] },
+            { "required": ["read-only"] }
+          ],
           "properties": {
             "flag": { "type": "string", "minLength": 1 },
             "full": { "type": "string", "minLength": 1 },
             "read_only": { "type": "string", "minLength": 1 },
-            "readOnly": { "type": "string", "minLength": 1 }
+            "readOnly": { "type": "string", "minLength": 1 },
+            "read-only": { "type": "string", "minLength": 1 }
           }
         },
         {
