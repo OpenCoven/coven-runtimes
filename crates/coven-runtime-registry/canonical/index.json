@@ -86,6 +86,33 @@
         "sha256": "036194b4d22aa1ba289a03b43906aeb51ff28a994c324d4da980c3c05cb2613b",
         "published_at": "2026-07-07T06:14:00Z"
       }
+    ],
+    "opencode": [
+      {
+        "version": "0.1.0",
+        "adapter": {
+          "id": "opencode",
+          "label": "OpenCode",
+          "executable": "opencode",
+          "interactive_prompt_prefix_args": [],
+          "non_interactive_prompt_prefix_args": [
+            "run"
+          ],
+          "install_hint": "Install OpenCode from https://opencode.ai/docs/cli (e.g. `npm i -g opencode-ai`) and ensure `opencode` resolves on PATH. Verify with `opencode run --help` — the similarly-named Go app some package managers ship has no `run` subcommand and will not work.",
+          "model_flag": "--model",
+          "capabilities": {
+            "stream": false,
+            "preassigned_session_id": false,
+            "think": false,
+            "speed": false
+          },
+          "version": "0.1.0",
+          "homepage": "https://opencode.ai",
+          "description": "OpenCode runtime adapter for Coven. Drives `opencode run` in non-interactive mode; system prompts and tools are configured via the OpenCode project config (AGENTS.md / opencode.json), not via CLI flags."
+        },
+        "sha256": "78446f372a427e92c1450645b2b393d080863c047a873a99e917b1dd25f5e150",
+        "published_at": "2026-07-07T12:16:43Z"
+      }
     ]
   }
 }

@@ -5,11 +5,11 @@
       "label": "OpenCode",
       "executable": "opencode",
       "interactive_prompt_prefix_args": [],
-      "non_interactive_prompt_prefix_args": ["run"],
+      "non_interactive_prompt_prefix_args": [
+        "run"
+      ],
       "install_hint": "Install OpenCode from https://opencode.ai/docs/cli (e.g. `npm i -g opencode-ai`) and ensure `opencode` resolves on PATH. Verify with `opencode run --help` — the similarly-named Go app some package managers ship has no `run` subcommand and will not work.",
-      "system_prompt_flag": null,
       "model_flag": "--model",
-      "model_arg_template": null,
       "capabilities": {
         "stream": false,
         "preassigned_session_id": false,

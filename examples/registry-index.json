@@ -9,17 +9,40 @@
           "id": "copilot",
           "label": "GitHub Copilot CLI",
           "executable": "copilot",
-          "interactive_prompt_prefix_args": ["-i"],
-          "non_interactive_prompt_prefix_args": ["-s", "-p"],
+          "interactive_prompt_prefix_args": [
+            "-i"
+          ],
+          "non_interactive_prompt_prefix_args": [
+            "-s",
+            "-p"
+          ],
           "install_hint": "npm install -g @github/copilot (or `brew install copilot-cli`), then run `copilot login` and ensure `copilot` is on PATH.",
           "model_flag": "--model",
-          "capabilities": { "stream": true, "preassigned_session_id": true, "think": false, "speed": false },
+          "capabilities": {
+            "stream": true,
+            "preassigned_session_id": true,
+            "think": false,
+            "speed": false
+          },
           "sandbox": {
-            "full_args": ["--allow-all"],
-            "read_only_args": ["--deny-tool", "write", "--deny-tool", "shell"]
+            "full_args": [
+              "--allow-all"
+            ],
+            "read_only_args": [
+              "--deny-tool",
+              "write",
+              "--deny-tool",
+              "shell"
+            ]
           },
           "stream_args": {
-            "prefix_args": ["--output-format", "json", "--stream", "on", "-p"],
+            "prefix_args": [
+              "--output-format",
+              "json",
+              "--stream",
+              "on",
+              "-p"
+            ],
             "session_id_flag": "--session-id",
             "resume_flag": "--resume"
           },
@@ -37,10 +60,26 @@
           "id": "hermes",
           "label": "Hermes Agent",
           "executable": "hermes",
-          "interactive_prompt_prefix_args": ["chat", "--source", "coven", "-q"],
-          "non_interactive_prompt_prefix_args": ["chat", "--source", "coven", "-Q", "-q"],
+          "interactive_prompt_prefix_args": [
+            "chat",
+            "--source",
+            "coven",
+            "-q"
+          ],
+          "non_interactive_prompt_prefix_args": [
+            "chat",
+            "--source",
+            "coven",
+            "-Q",
+            "-q"
+          ],
           "install_hint": "Install Hermes Agent, add it to PATH, and complete Hermes setup before using this adapter.",
-          "capabilities": { "stream": false, "preassigned_session_id": false, "think": false, "speed": false },
+          "capabilities": {
+            "stream": false,
+            "preassigned_session_id": false,
+            "think": false,
+            "speed": false
+          },
           "version": "1.0.0",
           "description": "A plain one-shot runtime with baseline capabilities."
         }
@@ -55,11 +94,18 @@
           "label": "OpenCode",
           "executable": "opencode",
           "interactive_prompt_prefix_args": [],
-          "non_interactive_prompt_prefix_args": ["run"],
-          "install_hint": "Install OpenCode (https://opencode.ai/docs/cli) and ensure `opencode` resolves on PATH. Verify with `opencode --version`.",
+          "non_interactive_prompt_prefix_args": [
+            "run"
+          ],
+          "install_hint": "Install OpenCode from https://opencode.ai/docs/cli (e.g. `npm i -g opencode-ai`) and ensure `opencode` resolves on PATH. Verify with `opencode run --help` \u2014 the similarly-named Go app some package managers ship has no `run` subcommand and will not work.",
           "system_prompt_flag": null,
           "model_flag": "--model",
-          "capabilities": { "stream": false, "preassigned_session_id": false, "think": false, "speed": false },
+          "capabilities": {
+            "stream": false,
+            "preassigned_session_id": false,
+            "think": false,
+            "speed": false
+          },
           "version": "0.1.0",
           "homepage": "https://opencode.ai",
           "description": "OpenCode runtime adapter for Coven. Drives `opencode run` in non-interactive mode; system prompts and tools are configured via the OpenCode project config (AGENTS.md / opencode.json), not via CLI flags."
