@@ -59,6 +59,7 @@ base="https://github.com/OpenCoven/coven-runtimes/releases/download/$TAG"
 curl -fsSLO "$base/registry-index.json"
 curl -fsSLO "$base/registry-index.json.sha256"
 echo "$(cat registry-index.json.sha256)  registry-index.json" | sha256sum -c -
+# macOS has no sha256sum; use:  … | shasum -a 256 -c -
 ```
 
 The document shape (stable within an `INDEX_FORMAT`):
