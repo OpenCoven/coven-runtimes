@@ -13,7 +13,10 @@ There are two kinds of contribution, and they have different bars:
 
 ## 1. Adding a runtime adapter
 
-This is the common case, and the tooling is built for it.
+This is the common case, and the tooling is built for it. For the narrative
+start-to-finish walkthrough see [`docs/authoring.md`](docs/authoring.md); when
+something fails, [`docs/troubleshooting.md`](docs/troubleshooting.md) is
+symptom-indexed. The condensed version:
 
 ```sh
 # Scaffold a manifest (minimal one-shot, or streaming + sandbox)
