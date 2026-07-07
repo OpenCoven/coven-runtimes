@@ -47,7 +47,9 @@ them.
 Plus [`registry/`](registry) (the canonical source manifests — the approval
 surface), [`schema/`](schema) (JSON Schema for editors/CI),
 [`examples/`](examples) (dogfooded reference manifests), and
-[`docs/`](docs) (the conformance spec, registry, adoption, and integration guides).
+[`docs/`](docs) (start at the [docs index](docs/README.md): the authoring
+tutorial, conformance spec, troubleshooting, registry, adoption, and
+integration guides).
 
 ## Quickstart
 
@@ -142,7 +144,9 @@ Two kinds of contribution, two bars:
   then `conjure registry add` it and open a PR. Merging it under
   [`registry/runtimes/`](registry) is what makes it *accepted*
   (see [`GOVERNANCE.md`](GOVERNANCE.md)). This is the common case and the tooling
-  is built for it.
+  is built for it — [`docs/authoring.md`](docs/authoring.md) walks the whole
+  journey, and [`docs/troubleshooting.md`](docs/troubleshooting.md) covers the
+  errors you might hit.
 - **Changing the SDK crates** — must pass `fmt`, `clippy -D warnings`,
   `test --locked`, and `cargo deny`.
 
