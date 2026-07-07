@@ -338,7 +338,8 @@ mod tests {
     #[test]
     fn canonical_index_resolves_seeded_runtimes() {
         let idx = RegistryIndex::canonical();
-        // The seeded accepted runtime must resolve by "latest".
+        // The seeded accepted runtimes must resolve by "latest".
         assert!(idx.resolve_latest("hermes").is_ok());
+        assert!(idx.resolve_latest("copilot").is_ok());
     }
 }
