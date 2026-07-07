@@ -22,6 +22,15 @@ use serde::{Deserialize, Serialize};
 /// The registry index format version.
 pub const INDEX_FORMAT: &str = "1";
 
+/// The canonical registry of accepted runtimes, embedded at compile time.
+///
+/// These are the exact bytes of `canonical/index.json`, regenerated from
+/// `registry/runtimes/**` by `conjure registry build` and kept in sync by a
+/// drift-guard test. The same bytes are published as a release asset for
+/// non-Rust consumers, so the embedded copy and the downloadable one never
+/// disagree. Prefer [`RegistryIndex::canonical`] over parsing this yourself.
+pub const CANONICAL_INDEX_JSON: &str = include_str!("../canonical/index.json");
+
 /// Top-level registry document.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RegistryIndex {
@@ -74,6 +83,17 @@ pub enum ResolveError {
 }
 
 impl RegistryIndex {
+    /// The canonical, accepted registry embedded in this crate — the list a
+    /// downstream Rust consumer (e.g. `coven` core) resolves against, pinned by
+    /// this crate's version.
+    ///
+    /// Infallible: the embedded [`CANONICAL_INDEX_JSON`] is guaranteed to parse
+    /// by the `canonical_index_*` tests, which run in CI before any release.
+    pub fn canonical() -> Self {
+        Self::from_json(CANONICAL_INDEX_JSON)
+            .expect("embedded canonical index must be valid JSON (guarded by tests)")
+    }
+
     /// Parse an index from JSON text.
     pub fn from_json(raw: &str) -> Result<Self, serde_json::Error> {
         serde_json::from_str(raw)
@@ -301,5 +321,25 @@ mod tests {
     fn format_defaults_when_missing() {
         let idx = RegistryIndex::from_json(r#"{ "runtimes": {} }"#).unwrap();
         assert_eq!(idx.format, INDEX_FORMAT);
+    }
+
+    // The embedded canonical index (the published, accepted list) must always be
+    // loadable and internally consistent — this guards the `canonical()`
+    // `expect`, so a malformed index fails `cargo test`, never a consumer.
+    #[test]
+    fn canonical_index_parses_and_validates() {
+        let idx = RegistryIndex::canonical();
+        assert_eq!(idx.format, INDEX_FORMAT);
+        assert!(!idx.runtimes.is_empty(), "canonical index is empty");
+        let errors = idx.validate();
+        assert!(errors.is_empty(), "canonical index invalid: {errors:?}");
+    }
+
+    #[test]
+    fn canonical_index_resolves_seeded_runtimes() {
+        let idx = RegistryIndex::canonical();
+        // The seeded accepted runtimes must resolve by "latest".
+        assert!(idx.resolve_latest("hermes").is_ok());
+        assert!(idx.resolve_latest("copilot").is_ok());
     }
 }

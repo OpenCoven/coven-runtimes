@@ -9,6 +9,12 @@ cleanly after this repo is published.
 > **Status:** planned. Nothing in `coven` core imports this crate yet. This
 > document is the integration contract, not a record of completed work.
 
+Where the manifests *come from* once core reads them is the
+[canonical registry](registry.md): core resolves accepted runtimes from the
+embedded `RegistryIndex::canonical()` (see [`adoption.md`](adoption.md)) rather
+than scanning loose `*.json` files. This doc covers the *reading* side — the
+`harness.rs` seam — which is orthogonal to how the list is maintained.
+
 ## The seam today
 
 In `coven`'s `crates/coven-cli/src/harness.rs`:
@@ -46,6 +52,11 @@ map a sandbox without editing core Rust.
    `capabilities { stream, preassigned_session_id, think, speed }` all true with
    the matching `stream_args`; Codex stays baseline.
 5. `into_spec` maps the manifest's `sandbox` through instead of forcing `None`.
+   Note the spec's `SandboxMapping` has two forms — the `--flag value` pair
+   (Codex, Claude) and a per-policy argv list (GitHub Copilot CLI's
+   `--allow-all` / `--deny-tool …`) — so core should consume
+   `SandboxMapping::args(permission)` (a `Vec<String>`) rather than assuming a
+   two-token `[flag, value]` shape.
 
 Because the manifest is a **backward-compatible superset** of coven's current
 adapter JSON (same field names, same camelCase aliases), existing `*.json`

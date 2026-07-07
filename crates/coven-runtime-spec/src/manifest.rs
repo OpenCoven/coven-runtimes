@@ -204,6 +204,47 @@ mod tests {
         );
     }
 
+    /// A Copilot-shaped adapter — args-form sandbox, JSONL streaming — parses,
+    /// exposes the right capability surface, and round-trips losslessly.
+    #[test]
+    fn copilot_shaped_adapter_round_trips() {
+        let raw = r#"{
+          "adapters": [{
+            "id": "copilot", "label": "GitHub Copilot CLI", "executable": "copilot",
+            "interactive_prompt_prefix_args": ["-i"],
+            "non_interactive_prompt_prefix_args": ["-s", "-p"],
+            "install_hint": "npm install -g @github/copilot",
+            "model_flag": "--model",
+            "capabilities": { "stream": true, "preassigned_session_id": true },
+            "sandbox": { "full_args": ["--allow-all"], "read_only_args": ["--deny-tool", "write", "--deny-tool", "shell"] },
+            "stream_args": { "prefix_args": ["--output-format", "json", "--stream", "on", "-p"], "session_id_flag": "--session-id", "resume_flag": "--resume" },
+            "version": "1.0.0"
+          }]
+        }"#;
+        let m = AdapterManifest::from_json(raw).unwrap();
+        let a = &m.adapters[0];
+        assert!(a.capabilities.stream);
+        assert!(a.capabilities.preassigned_session_id);
+        assert!(a.supports_model());
+        assert!(a.supports_permission());
+        match a.sandbox.as_ref().unwrap() {
+            crate::sandbox::SandboxMapping::Args {
+                full_args,
+                read_only_args,
+            } => {
+                assert_eq!(full_args, &["--allow-all"]);
+                assert_eq!(
+                    read_only_args,
+                    &["--deny-tool", "write", "--deny-tool", "shell"]
+                );
+            }
+            other => panic!("expected args-form sandbox, got {other:?}"),
+        }
+
+        let reparsed = AdapterManifest::from_json(&m.to_json_pretty().unwrap()).unwrap();
+        assert_eq!(m, reparsed);
+    }
+
     #[test]
     fn full_adapter_round_trips() {
         let raw = r#"{

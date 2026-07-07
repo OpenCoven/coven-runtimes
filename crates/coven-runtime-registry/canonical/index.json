@@ -1,0 +1,91 @@
+{
+  "format": "1",
+  "runtimes": {
+    "copilot": [
+      {
+        "version": "1.0.0",
+        "adapter": {
+          "id": "copilot",
+          "label": "GitHub Copilot CLI",
+          "executable": "copilot",
+          "interactive_prompt_prefix_args": [
+            "-i"
+          ],
+          "non_interactive_prompt_prefix_args": [
+            "-s",
+            "-p"
+          ],
+          "install_hint": "npm install -g @github/copilot (or `brew install copilot-cli`), then run `copilot login` and ensure `copilot` is on PATH.",
+          "model_flag": "--model",
+          "capabilities": {
+            "stream": true,
+            "preassigned_session_id": true,
+            "think": false,
+            "speed": false
+          },
+          "sandbox": {
+            "full_args": [
+              "--allow-all"
+            ],
+            "read_only_args": [
+              "--deny-tool",
+              "write",
+              "--deny-tool",
+              "shell"
+            ]
+          },
+          "stream_args": {
+            "prefix_args": [
+              "--output-format",
+              "json",
+              "--stream",
+              "on",
+              "-p"
+            ],
+            "session_id_flag": "--session-id",
+            "resume_flag": "--resume"
+          },
+          "version": "1.0.0",
+          "homepage": "https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli",
+          "description": "GitHub Copilot CLI adapter. One-shot via `-s -p`, interactive via `-i`, JSONL streaming via `--output-format json --stream on`, session pre-assignment/resume via `--session-id`/`--resume`. Permission mapping uses the argv-list sandbox form because Copilot's flags are boolean/repeatable (`--allow-all`; `--deny-tool write --deny-tool shell`) rather than a single `--flag value` pair."
+        },
+        "sha256": "af7b5c1cec279a7e5229fddae4d6c6a1892209c712ce81e1f0eba2d0385d448e",
+        "published_at": "2026-07-07T10:37:46Z"
+      }
+    ],
+    "hermes": [
+      {
+        "version": "1.0.0",
+        "adapter": {
+          "id": "hermes",
+          "label": "Hermes Agent",
+          "executable": "hermes",
+          "interactive_prompt_prefix_args": [
+            "chat",
+            "--source",
+            "coven",
+            "-q"
+          ],
+          "non_interactive_prompt_prefix_args": [
+            "chat",
+            "--source",
+            "coven",
+            "-Q",
+            "-q"
+          ],
+          "install_hint": "Install Hermes Agent, add it to PATH, and complete Hermes setup before using this adapter.",
+          "capabilities": {
+            "stream": false,
+            "preassigned_session_id": false,
+            "think": false,
+            "speed": false
+          },
+          "version": "1.0.0",
+          "description": "Reference adapter — mirrors coven's built-in Hermes recipe. A plain one-shot runtime with baseline capabilities."
+        },
+        "sha256": "036194b4d22aa1ba289a03b43906aeb51ff28a994c324d4da980c3c05cb2613b",
+        "published_at": "2026-07-07T06:14:00Z"
+      }
+    ]
+  }
+}

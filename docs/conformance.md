@@ -61,14 +61,33 @@ baseline of a plain one-shot CLI). These replace coven's hardcoded
 ### Sandbox
 
 `sandbox` object (optional). Maps the composer's Access chip to the runtime's
-native flag. Omit it and `coven run --permission` is a warned no-op (today's
-behavior for every manifest).
+native permission args. Omit it and `coven run --permission` is a warned no-op
+(today's behavior for every manifest).
+
+Two structural forms are accepted (distinguished by their fields, no tag):
+
+**Flag form** — one flag, one value per policy (Codex, Claude):
 
 | Field (aliases) | Type | Rule |
 |-----------------|------|------|
 | `flag` | string | Non-empty. e.g. `--sandbox` (Codex), `--permission-mode` (Claude). |
 | `full` | string | Non-empty. Value for the unrestricted policy. |
 | `read_only` (`readOnly`, `read-only`) | string | Non-empty. Value for read-only/plan policy. |
+
+**Args form** — a whole argv list per policy, for runtimes whose permission
+surface is boolean or repeatable flags (GitHub Copilot CLI):
+
+| Field (aliases) | Type | Rule |
+|-----------------|------|------|
+| `full_args` (`fullArgs`) | string[] | ≥1 non-empty token. e.g. `["--allow-all"]`. |
+| `read_only_args` (`readOnlyArgs`) | string[] | ≥1 non-empty token. e.g. `["--deny-tool", "write", "--deny-tool", "shell"]`. |
+
+```jsonc
+// Flag form (Claude)
+"sandbox": { "flag": "--permission-mode", "full": "bypassPermissions", "read_only": "plan" }
+// Args form (Copilot)
+"sandbox": { "full_args": ["--allow-all"], "read_only_args": ["--deny-tool", "write", "--deny-tool", "shell"] }
+```
 
 ### Stream args
 
@@ -96,7 +115,9 @@ config.
 3. Executable is a bare command name.
 4. `label` and `install_hint` are non-empty.
 5. `model_arg_template`, if present, contains `{model}`.
-6. `sandbox`, if present, has non-empty `flag` / `full` / `read_only`.
+6. `sandbox`, if present, has non-empty `flag` / `full` / `read_only` (flag
+   form) or ≥1 non-empty token in each of `full_args` / `read_only_args`
+   (args form).
 7. `capabilities.stream` ⇒ `stream_args` with non-empty `prefix_args`.
 8. `capabilities.preassigned_session_id` ⇒ `stream_args.session_id_flag`.
 9. `stream_args` present ⇒ `capabilities.stream` true (no dead config).
@@ -108,7 +129,7 @@ runtime present:
 
 - the `executable` resolves on `PATH`;
 - it runs cleanly for a bounded probe (`--version`, then `--help`);
-- declared `model_flag` / `sandbox.flag` are mentioned in probe output
+- declared `model_flag` / sandbox flags are mentioned in probe output
   (a **soft warning** only — CLIs don't always list every flag).
 
 The probe never sends a prompt or does work. Use `--skip-binary` in CI where the
