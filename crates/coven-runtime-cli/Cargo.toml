@@ -1,6 +1,6 @@
 [package]
 name = "coven-runtime-cli"
-version = "0.1.0"
+version = "0.1.1"
 description = "conjure — author, validate, conformance-test, and package Coven runtime adapters."
 edition.workspace = true
 license.workspace = true
