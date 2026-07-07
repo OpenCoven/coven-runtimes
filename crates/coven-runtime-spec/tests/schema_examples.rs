@@ -53,6 +53,7 @@ fn schema_accepts_example_manifests() {
         "examples/hermes.json",
         "examples/claude.json",
         "examples/copilot.json",
+        "examples/opencode.json",
     ] {
         let instance = load_json(name);
         assert_valid(&validator, &instance, name);
