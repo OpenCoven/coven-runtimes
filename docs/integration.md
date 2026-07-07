@@ -9,6 +9,12 @@ cleanly after this repo is published.
 > **Status:** planned. Nothing in `coven` core imports this crate yet. This
 > document is the integration contract, not a record of completed work.
 
+Where the manifests *come from* once core reads them is the
+[canonical registry](registry.md): core resolves accepted runtimes from the
+embedded `RegistryIndex::canonical()` (see [`adoption.md`](adoption.md)) rather
+than scanning loose `*.json` files. This doc covers the *reading* side — the
+`harness.rs` seam — which is orthogonal to how the list is maintained.
+
 ## The seam today
 
 In `coven`'s `crates/coven-cli/src/harness.rs`:
