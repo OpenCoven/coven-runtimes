@@ -24,8 +24,8 @@ tempfile = "3"
 # Internal crates reference each other through the workspace. Explicit versions
 # (not bare paths) keep them out of cargo-deny's wildcard ban and make the crates
 # publishable to crates.io later without edits.
-coven-runtime-spec = { path = "crates/coven-runtime-spec", version = "0.1.2" }
-coven-runtime-registry = { path = "crates/coven-runtime-registry", version = "0.1.2" }
+coven-runtime-spec = { path = "crates/coven-runtime-spec", version = "0.1.3" }
+coven-runtime-registry = { path = "crates/coven-runtime-registry", version = "0.1.3" }
 
 [profile.release]
 strip = true
