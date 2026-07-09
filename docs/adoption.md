@@ -96,3 +96,16 @@ verify an individual adapter you pulled, its `sha256` is the digest
 - **Yanks are advisory to you.** A yanked version stays resolvable by exact pin;
   it's just excluded from "latest". If you pinned a version that later gets
   yanked, you keep working — but treat it as a signal to move off.
+
+---
+
+## Push notifications for downstream sync
+
+Merges to `main` that touch `registry/**` (or the canonical index) fire a
+`repository_dispatch` (`runtimes-registry-updated`) at downstream repos via
+[`notify-downstream.yml`](../.github/workflows/notify-downstream.yml), so an
+adopting repo can regenerate its committed registry module and open a reviewed
+PR without polling. `coven-cave` listens with its `Sync runtimes registry`
+workflow. To add another downstream, extend the notify workflow with a second
+dispatch step and give this repo a token that can reach the target repo
+(secret per downstream, e.g. `CAVE_DISPATCH_TOKEN`).

@@ -1,0 +1,45 @@
+# Notify downstream consumers when the accepted registry changes.
+#
+# When a merge to main touches registry/** (a new runtime accepted, a version
+# added, or a yank), fire a repository_dispatch at each downstream repo so its
+# sync workflow can regenerate its committed registry module and open a PR.
+#
+# Setup (one-time, per downstream):
+#   Create a fine-grained PAT with access to the downstream repo and
+#   "Contents: read & write" permission (repository_dispatch requires write),
+#   then store it in this repo's secrets as CAVE_DISPATCH_TOKEN.
+#
+# Downstream listener: coven-cave's .github/workflows/sync-runtimes.yml
+# (repository_dispatch type `runtimes-registry-updated`).
+
+name: Notify downstream
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "registry/**"
+      - "crates/coven-runtime-registry/canonical/index.json"
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch to coven-cave
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fire repository_dispatch
+        env:
+          GH_TOKEN: ${{ secrets.CAVE_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::warning::CAVE_DISPATCH_TOKEN is not set — skipping downstream notify."
+            exit 0
+          fi
+          gh api "repos/OpenCoven/coven-cave/dispatches" \
+            -f event_type=runtimes-registry-updated \
+            -F "client_payload[source_sha]=${GITHUB_SHA}"
+          echo "Dispatched runtimes-registry-updated to OpenCoven/coven-cave (source ${GITHUB_SHA})."
