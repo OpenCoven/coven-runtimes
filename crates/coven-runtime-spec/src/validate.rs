@@ -124,6 +124,16 @@ fn validate_adapter_into(adapter: &RuntimeAdapter, errors: &mut Vec<ValidationEr
         errors.push(err(tag(), "install_hint", "install_hint must not be empty"));
     }
 
+    if let Some(version) = adapter.version.as_deref() {
+        if !valid_registry_version(version) {
+            errors.push(err(
+                tag(),
+                "version",
+                &format!("version `{version}` is not valid semver"),
+            ));
+        }
+    }
+
     // ── model selection ─────────────────────────────────────────────────────
     if let Some(template) = adapter.model_arg_template.as_deref() {
         if !template.contains("{model}") {
@@ -251,6 +261,25 @@ pub fn valid_adapter_id(value: &str) -> bool {
         })
 }
 
+/// Minimal semver accepted by the registry: exactly `major.minor.patch`, with
+/// numeric components. Pre-release and build metadata are not ordered yet.
+pub fn valid_registry_version(value: &str) -> bool {
+    let mut parts = value.trim().split('.');
+    let Some(major) = parts.next() else {
+        return false;
+    };
+    let Some(minor) = parts.next() else {
+        return false;
+    };
+    let Some(patch) = parts.next() else {
+        return false;
+    };
+    parts.next().is_none()
+        && [major, minor, patch]
+            .iter()
+            .all(|part| !part.is_empty() && part.parse::<u64>().is_ok())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,6 +342,16 @@ mod tests {
         let errs = validate_adapter(&a);
         assert!(errs.iter().any(|e| e.field == "label"));
         assert!(errs.iter().any(|e| e.field == "install_hint"));
+    }
+
+    #[test]
+    fn rejects_non_semver_version() {
+        let mut a = base_adapter("x");
+        a.version = Some("not-semver".into());
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "version" && e.message.contains("not valid semver")));
     }
 
     #[test]

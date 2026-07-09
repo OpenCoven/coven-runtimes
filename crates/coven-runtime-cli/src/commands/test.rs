@@ -14,7 +14,9 @@
 //! runtime installed).
 
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use anyhow::{bail, Result};
 use clap::Args;
@@ -98,6 +100,14 @@ enum ProbeResult {
 }
 
 fn probe_adapter(adapter: &RuntimeAdapter, override_flag: Option<&str>) -> ProbeResult {
+    probe_adapter_with_timeout(adapter, override_flag, Duration::from_secs(5))
+}
+
+fn probe_adapter_with_timeout(
+    adapter: &RuntimeAdapter,
+    override_flag: Option<&str>,
+    timeout: Duration,
+) -> ProbeResult {
     let flags: Vec<&str> = match override_flag {
         Some(f) => vec![f],
         None => vec!["--version", "--help"],
@@ -105,7 +115,7 @@ fn probe_adapter(adapter: &RuntimeAdapter, override_flag: Option<&str>) -> Probe
 
     let mut last_err = String::new();
     for flag in &flags {
-        match Command::new(&adapter.executable).arg(flag).output() {
+        match run_probe_command(&adapter.executable, flag, timeout) {
             Ok(output) => {
                 // Any clean spawn+exit counts as runnable; many CLIs exit non-zero
                 // on --version/--help, so we only require that it *ran*.
@@ -125,6 +135,32 @@ fn probe_adapter(adapter: &RuntimeAdapter, override_flag: Option<&str>) -> Probe
         }
     }
     ProbeResult::NotRunnable(last_err)
+}
+
+fn run_probe_command(executable: &str, flag: &str, timeout: Duration) -> std::io::Result<Output> {
+    let mut child = Command::new(executable)
+        .arg(flag)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
+    let deadline = Instant::now() + timeout;
+
+    loop {
+        if child.try_wait()?.is_some() {
+            return child.wait_with_output();
+        }
+
+        if Instant::now() >= deadline {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                format!("probe `{executable} {flag}` timed out after {timeout:?}"),
+            ));
+        }
+
+        thread::sleep(Duration::from_millis(10));
+    }
 }
 
 /// Soft checks: if the adapter declares a flag, note when the probe output
@@ -155,6 +191,9 @@ fn soft_flag_warnings(adapter: &RuntimeAdapter, probe_output: &str) -> Vec<Strin
 mod tests {
     use super::*;
     use coven_runtime_spec::{Capabilities, SandboxMapping};
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt;
+    use tempfile::tempdir;
 
     fn adapter(exe: &str) -> RuntimeAdapter {
         RuntimeAdapter {
@@ -193,6 +232,22 @@ mod tests {
         match probe_adapter(&a, Some("--version")) {
             ProbeResult::Ok { .. } => {}
             other => panic!("expected Ok, got {:?}", DebugProbe(&other)),
+        }
+    }
+
+    #[test]
+    fn probe_times_out_blocking_binary() {
+        let dir = tempdir().unwrap();
+        let script = dir.path().join("blocks");
+        fs::write(&script, "#!/bin/sh\nsleep 1\n").unwrap();
+        let mut perms = fs::metadata(&script).unwrap().permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&script, perms).unwrap();
+
+        let a = adapter(script.to_str().unwrap());
+        match probe_adapter_with_timeout(&a, Some("--version"), Duration::from_millis(50)) {
+            ProbeResult::NotRunnable(msg) => assert!(msg.contains("timed out"), "{msg}"),
+            other => panic!("expected NotRunnable timeout, got {:?}", DebugProbe(&other)),
         }
     }
 

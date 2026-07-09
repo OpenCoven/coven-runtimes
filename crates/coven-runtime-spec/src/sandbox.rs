@@ -30,7 +30,7 @@ use serde::{Deserialize, Serialize};
 /// Naming follows the manifest convention: snake_case canonical with
 /// camelCase (and, for `read_only`, kebab-case) aliases.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[serde(untagged, deny_unknown_fields)]
 pub enum SandboxMapping {
     /// Single `--flag value` pair per policy (Codex, Claude).
     Flag {

@@ -19,6 +19,7 @@ use crate::sandbox::SandboxMapping;
 /// A manifest file: a registry of one or more adapters. Matches coven's
 /// `{ "adapters": [ ... ] }` envelope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AdapterManifest {
     #[serde(default)]
     pub adapters: Vec<RuntimeAdapter>,
@@ -43,6 +44,7 @@ impl AdapterManifest {
 /// Field naming follows the manifest convention: snake_case is canonical (so
 /// coven's existing snake_case adapters parse unchanged) with camelCase aliases.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct StreamArgs {
     /// argv tokens that put the runtime into persistent stream-json mode.
     #[serde(alias = "prefixArgs")]
@@ -66,7 +68,7 @@ pub struct StreamArgs {
 /// Field names and `camelCase` aliases match coven's `ExternalHarnessAdapterSpec`
 /// so this is a drop-in superset.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub struct RuntimeAdapter {
     /// Canonical id: lowercase letters, digits, `.`, `_`, `-`.
     pub id: String,
@@ -202,6 +204,20 @@ mod tests {
             a.stream_args.as_ref().unwrap().session_id_flag.as_deref(),
             Some("--session-id")
         );
+    }
+
+    #[test]
+    fn rejects_unknown_manifest_fields() {
+        let raw = r#"{
+          "adapters": [{
+            "id": "x", "label": "X", "executable": "x",
+            "install_hint": "hint",
+            "capabilties": { "stream": true }
+          }]
+        }"#;
+        let err = AdapterManifest::from_json(raw).unwrap_err().to_string();
+        assert!(err.contains("unknown field"), "{err}");
+        assert!(err.contains("capabilties"), "{err}");
     }
 
     /// A Copilot-shaped adapter — args-form sandbox, JSONL streaming — parses,
