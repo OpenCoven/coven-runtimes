@@ -21,7 +21,7 @@ use serde::{Deserialize, Serialize};
 /// it actually supports, and [`crate::validate`] cross-checks those claims
 /// against the rest of the manifest (e.g. `stream` requires stream args).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Capabilities {
     /// Long-lived stream-json process: stdin reads newline-delimited JSON
     /// messages, stdout writes newline-delimited JSON events. Mirrors

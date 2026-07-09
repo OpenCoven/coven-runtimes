@@ -105,7 +105,9 @@ fn registry_index_without_flag_fails_loudly() {
     let path = write(dir.path(), "index.json", REGISTRY_JSON);
     let out = conjure().arg("validate").arg(&path).output().unwrap();
     assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("no adapters"));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("failed to parse manifest"), "{stderr}");
+    assert!(stderr.contains("unknown field `format`"), "{stderr}");
 }
 
 #[test]

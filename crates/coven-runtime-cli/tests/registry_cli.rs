@@ -183,6 +183,33 @@ fn add_accepts_manifest_and_rebuilds() {
 }
 
 #[test]
+fn add_rejects_non_semver_version() {
+    let dir = tempdir().unwrap();
+    let sources = dir.path().join("registry/runtimes");
+    let out = dir.path().join("canonical/index.json");
+    let manifest = dir.path().join("badver.json");
+    fs::write(&manifest, ARIA_SRC.replace("\"1.0.0\"", "\"not-semver\"")).unwrap();
+
+    let res = conjure()
+        .args(["registry", "add"])
+        .arg(&manifest)
+        .arg("--sources")
+        .arg(&sources)
+        .arg("--out")
+        .arg(&out)
+        .output()
+        .unwrap();
+
+    assert!(!res.status.success());
+    assert!(
+        stderr(&res).contains("version `not-semver` is not valid semver"),
+        "unexpected error: {}",
+        stderr(&res)
+    );
+    assert!(!sources.join("aria/not-semver.json").exists());
+}
+
+#[test]
 fn list_shows_accepted_runtimes() {
     let dir = tempdir().unwrap();
     let sources = dir.path().join("registry/runtimes");
