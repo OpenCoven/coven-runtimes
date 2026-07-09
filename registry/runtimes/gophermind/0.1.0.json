@@ -1,0 +1,41 @@
+{
+  "adapters": [
+    {
+      "id": "gophermind",
+      "label": "GopherMind",
+      "executable": "gophermind",
+      "interactive_prompt_prefix_args": [],
+      "non_interactive_prompt_prefix_args": [
+        "--print"
+      ],
+      "install_hint": "brew install jbrahy/tap/gophermind — or build from https://github.com/jbrahy/gophermind.com",
+      "system_prompt_flag": "--append-system-prompt",
+      "model_flag": "--model",
+      "capabilities": {
+        "stream": true,
+        "preassigned_session_id": true,
+        "think": false,
+        "speed": false
+      },
+      "sandbox": {
+        "flag": "--permission-mode",
+        "full": "auto",
+        "read_only": "plan"
+      },
+      "stream_args": {
+        "prefix_args": [
+          "--print",
+          "--input-format",
+          "stream-json",
+          "--output-format",
+          "stream-json"
+        ],
+        "session_id_flag": "--session-id",
+        "resume_flag": "--resume"
+      },
+      "version": "0.1.0",
+      "homepage": "https://github.com/jbrahy/gophermind.com",
+      "description": "A minimal agentic coding harness for OpenAI-compatible LLMs. Streams via a Claude-Code-compatible stream-json protocol with pre-assigned sessions and resume; maps sandbox to a read-only plan mode."
+    }
+  ]
+}
