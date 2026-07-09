@@ -191,9 +191,6 @@ fn soft_flag_warnings(adapter: &RuntimeAdapter, probe_output: &str) -> Vec<Strin
 mod tests {
     use super::*;
     use coven_runtime_spec::{Capabilities, SandboxMapping};
-    use std::fs;
-    use std::os::unix::fs::PermissionsExt;
-    use tempfile::tempdir;
 
     fn adapter(exe: &str) -> RuntimeAdapter {
         RuntimeAdapter {
@@ -235,9 +232,15 @@ mod tests {
         }
     }
 
+    /// Unix-only: builds a small shell script that blocks longer than the
+    /// probe timeout. Windows has no equivalent one-liner executable.
+    #[cfg(unix)]
     #[test]
     fn probe_times_out_blocking_binary() {
-        let dir = tempdir().unwrap();
+        use std::fs;
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().unwrap();
         let script = dir.path().join("blocks");
         fs::write(&script, "#!/bin/sh\nsleep 1\n").unwrap();
         let mut perms = fs::metadata(&script).unwrap().permissions();
