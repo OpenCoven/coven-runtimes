@@ -1,0 +1,21 @@
+{
+  "adapters": [
+    {
+      "id": "hermes",
+      "label": "Hermes Agent",
+      "executable": "hermes-coven",
+      "interactive_prompt_prefix_args": ["chat", "--source", "coven"],
+      "non_interactive_prompt_prefix_args": ["chat", "--source", "coven", "-Q"],
+      "install_hint": "Install Hermes Agent, add it to PATH, install the hermes-coven shim, and complete Hermes setup before using this adapter.",
+      "system_prompt_flag": null,
+      "capabilities": {
+        "stream": false,
+        "preassigned_session_id": false,
+        "think": false,
+        "speed": false
+      },
+      "version": "1.0.1",
+      "description": "Reference adapter — mirrors coven's built-in Hermes recipe. A plain one-shot runtime with baseline capabilities. Uses the hermes-coven shim so the harness's trailing positional prompt is remapped to hermes chat's -q/--query flag (hermes has no positional prompt slot)."
+    }
+  ]
+}

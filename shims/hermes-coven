@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+# hermes-coven — adapter shim so the Coven harness can drive `hermes chat`.
+#
+# Why this exists:
+#   The Coven harness appends the user prompt as a POSITIONAL argument behind
+#   an options terminator, i.e. it runs:  <cmd> <prefix args...> -- "<prompt>"
+#   But `hermes chat` has NO positional prompt slot — the query is only
+#   accepted via `-q/--query <value>`. So `hermes chat ... -q -- "<prompt>"`
+#   starved `-q` of its value and argparse failed with:
+#       argument -q/--query: expected one argument
+#
+# This shim receives everything up to `--`, then the prompt after `--`, and
+# re-emits it as `hermes chat <passthrough> -q "<prompt>"` (inline value).
+#
+# Interactive (no trailing prompt / empty prompt) → launch the REPL with no -q.
+set -euo pipefail
+
+pre=()          # args before the `--` terminator (chat --source coven -Q ...)
+prompt=""       # the positional prompt after `--`
+seen_term=0
+
+for arg in "$@"; do
+  if [[ "$seen_term" -eq 0 && "$arg" == "--" ]]; then
+    seen_term=1
+    continue
+  fi
+  if [[ "$seen_term" -eq 1 ]]; then
+    # Only the first token after `--` is the prompt; the harness sends exactly
+    # one. If more arrive, join them with spaces to be safe.
+    if [[ -z "$prompt" ]]; then prompt="$arg"; else prompt="$prompt $arg"; fi
+  else
+    pre+=("$arg")
+  fi
+done
+
+if [[ -n "${prompt//[[:space:]]/}" ]]; then
+  # Non-interactive: hand the prompt to -q as its inline value. Strip any
+  # value-less -q/--query the prefix may still carry (older manifests placed
+  # a trailing -q here) so we never emit a duplicate query flag.
+  clean=()
+  for a in "${pre[@]}"; do
+    [[ "$a" == "-q" || "$a" == "--query" ]] && continue
+    clean+=("$a")
+  done
+  exec hermes "${clean[@]}" -q "$prompt"
+else
+  # Interactive REPL: no query to pass. Strip a trailing lone -q/-Q-adjacent
+  # -q if the prefix carried one (defensive; the fixed manifest won't).
+  clean=()
+  for a in "${pre[@]}"; do
+    [[ "$a" == "-q" || "$a" == "--query" ]] && continue
+    clean+=("$a")
+  done
+  exec hermes "${clean[@]}"
+fi
