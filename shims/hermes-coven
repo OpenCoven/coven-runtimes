@@ -33,23 +33,46 @@ for arg in "$@"; do
   fi
 done
 
+# strip_query <argv...> — echo the prefix argv with any query flag removed,
+# whether it appears as a bare flag (`-q` / `--query`, which under the harness
+# has no adjacent value), as a flag WITH its value (`-q <value>` /
+# `--query <value>`), or in `=` form (`-q=<value>` / `--query=<value>`).
+# The result is written to the global `cleaned` array. We own the query flag
+# entirely — the prompt (if any) is always re-appended by the caller — so it is
+# always safe to drop it here.
+strip_query() {
+  cleaned=()
+  local skip_next=0 a
+  for a in "$@"; do
+    if [[ "$skip_next" -eq 1 ]]; then
+      skip_next=0
+      continue
+    fi
+    case "$a" in
+      -q|--query)
+        # A following token, if present, is this flag's value: drop it too.
+        skip_next=1
+        continue
+        ;;
+      -q=*|--query=*)
+        # Inline `=` form carries its own value: drop the whole token.
+        continue
+        ;;
+      *)
+        cleaned+=("$a")
+        ;;
+    esac
+  done
+}
+
+# ${pre[@]:+"${pre[@]}"} guards against `set -u` on an empty array (bash 3.2).
+strip_query ${pre[@]:+"${pre[@]}"}
+
 if [[ -n "${prompt//[[:space:]]/}" ]]; then
-  # Non-interactive: hand the prompt to -q as its inline value. Strip any
-  # value-less -q/--query the prefix may still carry (older manifests placed
-  # a trailing -q here) so we never emit a duplicate query flag.
-  clean=()
-  for a in "${pre[@]}"; do
-    [[ "$a" == "-q" || "$a" == "--query" ]] && continue
-    clean+=("$a")
-  done
-  exec hermes "${clean[@]}" -q "$prompt"
+  # Non-interactive: hand the prompt to -q as its inline value. Any query flag
+  # the prefix carried has already been stripped, so we never duplicate it.
+  exec hermes ${cleaned[@]:+"${cleaned[@]}"} -q "$prompt"
 else
-  # Interactive REPL: no query to pass. Strip a trailing lone -q/-Q-adjacent
-  # -q if the prefix carried one (defensive; the fixed manifest won't).
-  clean=()
-  for a in "${pre[@]}"; do
-    [[ "$a" == "-q" || "$a" == "--query" ]] && continue
-    clean+=("$a")
-  done
-  exec hermes "${clean[@]}"
+  # Interactive REPL: no query to pass; launch with the query-free prefix.
+  exec hermes ${cleaned[@]:+"${cleaned[@]}"}
 fi
