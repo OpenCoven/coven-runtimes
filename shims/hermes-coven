@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# hermes-coven — adapter shim so the Coven harness can drive `hermes chat`.
+#
+# Why this exists:
+#   The Coven harness appends the user prompt as a POSITIONAL argument behind
+#   an options terminator, i.e. it runs:  <cmd> <prefix args...> -- "<prompt>"
+#   But `hermes chat` has NO positional prompt slot — the query is only
+#   accepted via `-q/--query <value>`. So `hermes chat ... -q -- "<prompt>"`
+#   starved `-q` of its value and argparse failed with:
+#       argument -q/--query: expected one argument
+#
+# This shim receives everything up to `--`, then the prompt after `--`, and
+# re-emits it as `hermes chat <passthrough> -q "<prompt>"` (inline value).
+#
+# Interactive (no trailing prompt / empty prompt) → launch the REPL with no -q.
+set -euo pipefail
+
+pre=()          # args before the `--` terminator (chat --source coven -Q ...)
+prompt=""       # the positional prompt after `--`
+seen_term=0
+
+for arg in "$@"; do
+  if [[ "$seen_term" -eq 0 && "$arg" == "--" ]]; then
+    seen_term=1
+    continue
+  fi
+  if [[ "$seen_term" -eq 1 ]]; then
+    # Only the first token after `--` is the prompt; the harness sends exactly
+    # one. If more arrive, join them with spaces to be safe.
+    if [[ -z "$prompt" ]]; then prompt="$arg"; else prompt="$prompt $arg"; fi
+  else
+    pre+=("$arg")
+  fi
+done
+
+# strip_query <argv...> — echo the prefix argv with any query flag removed,
+# whether it appears as a bare flag (`-q` / `--query`, which under the harness
+# has no adjacent value), as a flag WITH its value (`-q <value>` /
+# `--query <value>`), or in `=` form (`-q=<value>` / `--query=<value>`).
+# The result is written to the global `cleaned` array. We own the query flag
+# entirely — the prompt (if any) is always re-appended by the caller — so it is
+# always safe to drop it here.
+strip_query() {
+  cleaned=()
+  local skip_next=0 a
+  for a in "$@"; do
+    if [[ "$skip_next" -eq 1 ]]; then
+      skip_next=0
+      continue
+    fi
+    case "$a" in
+      -q|--query)
+        # A following token, if present, is this flag's value: drop it too.
+        skip_next=1
+        continue
+        ;;
+      -q=*|--query=*)
+        # Inline `=` form carries its own value: drop the whole token.
+        continue
+        ;;
+      *)
+        cleaned+=("$a")
+        ;;
+    esac
+  done
+}
+
+# ${pre[@]:+"${pre[@]}"} guards against `set -u` on an empty array (bash 3.2).
+strip_query ${pre[@]:+"${pre[@]}"}
+
+if [[ -n "${prompt//[[:space:]]/}" ]]; then
+  # Non-interactive: hand the prompt to -q as its inline value. Any query flag
+  # the prefix carried has already been stripped, so we never duplicate it.
+  exec hermes ${cleaned[@]:+"${cleaned[@]}"} -q "$prompt"
+else
+  # Interactive REPL: no query to pass; launch with the query-free prefix.
+  exec hermes ${cleaned[@]:+"${cleaned[@]}"}
+fi
