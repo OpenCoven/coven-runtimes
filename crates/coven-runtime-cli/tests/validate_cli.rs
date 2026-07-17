@@ -106,8 +106,8 @@ fn registry_index_without_flag_fails_loudly() {
     let out = conjure().arg("validate").arg(&path).output().unwrap();
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("failed to parse manifest"), "{stderr}");
-    assert!(stderr.contains("unknown field `format`"), "{stderr}");
+    assert!(stderr.contains("looks like a registry index"), "{stderr}");
+    assert!(stderr.contains("--registry"), "{stderr}");
 }
 
 #[test]

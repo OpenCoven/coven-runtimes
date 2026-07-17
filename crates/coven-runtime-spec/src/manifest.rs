@@ -18,8 +18,13 @@ use crate::sandbox::SandboxMapping;
 
 /// A manifest file: a registry of one or more adapters. Matches coven's
 /// `{ "adapters": [ ... ] }` envelope.
+///
+/// Parsing is **tolerant of unknown fields** so an index or manifest written
+/// by a newer spec version still loads on older consumers (forward
+/// compatibility). Authoring-time typo detection lives in
+/// [`crate::validate::unknown_manifest_fields`] and the JSON Schema, which
+/// `conjure` enforces.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct AdapterManifest {
     #[serde(default)]
     pub adapters: Vec<RuntimeAdapter>,
@@ -44,7 +49,6 @@ impl AdapterManifest {
 /// Field naming follows the manifest convention: snake_case is canonical (so
 /// coven's existing snake_case adapters parse unchanged) with camelCase aliases.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct StreamArgs {
     /// argv tokens that put the runtime into persistent stream-json mode.
     #[serde(alias = "prefixArgs")]
@@ -71,7 +75,6 @@ pub struct StreamArgs {
 /// Field naming follows the manifest convention: snake_case is canonical with
 /// camelCase aliases, matching coven's `ContinuityArgs`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct ContinuityArgs {
     /// argv tokens prepended when initializing a fresh named conversation.
     #[serde(default, alias = "initPrefixArgs")]
@@ -139,6 +142,13 @@ impl ContinuityArgs {
 pub enum EventProtocol {
     /// Grok Build's public `--output-format streaming-json` headless schema.
     GrokHeadlessV1,
+    /// A protocol value this spec version does not recognize. Never written by
+    /// valid manifests ([`crate::validate_manifest`] rejects it); exists so a
+    /// registry index containing a *newer* protocol degrades to one
+    /// unsupported adapter on old consumers instead of failing the whole
+    /// index parse.
+    #[serde(other)]
+    Unknown,
 }
 
 /// A single runtime adapter definition.
@@ -146,7 +156,7 @@ pub enum EventProtocol {
 /// Field names and `camelCase` aliases match coven's `ExternalHarnessAdapterSpec`
 /// so this is a drop-in superset.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
+#[serde(rename_all = "snake_case")]
 pub struct RuntimeAdapter {
     /// Canonical id: lowercase letters, digits, `.`, `_`, `-`.
     pub id: String,
@@ -321,18 +331,27 @@ mod tests {
         );
     }
 
+    /// Forward compatibility: a manifest written by a NEWER spec version (with
+    /// fields this version has never heard of) must still parse, and a newer
+    /// event-protocol value must degrade to `Unknown` rather than failing the
+    /// document. Typo strictness is the authoring layer's job
+    /// (`unknown_manifest_fields` + the JSON Schema via `conjure validate`).
     #[test]
-    fn rejects_unknown_manifest_fields() {
+    fn tolerates_fields_and_protocols_from_newer_spec_versions() {
         let raw = r#"{
           "adapters": [{
             "id": "x", "label": "X", "executable": "x",
             "install_hint": "hint",
-            "capabilties": { "stream": true }
+            "future_field": { "from": "v9" },
+            "event_protocol": "sonnet-headless-v9",
+            "capabilities": { "stream": false, "future_capability": true }
           }]
         }"#;
-        let err = AdapterManifest::from_json(raw).unwrap_err().to_string();
-        assert!(err.contains("unknown field"), "{err}");
-        assert!(err.contains("capabilties"), "{err}");
+        let manifest = AdapterManifest::from_json(raw).expect("newer-spec manifest parses");
+        let adapter = &manifest.adapters[0];
+        assert_eq!(adapter.id, "x");
+        assert_eq!(adapter.event_protocol, Some(EventProtocol::Unknown));
+        assert!(!adapter.capabilities.stream);
     }
 
     /// A Copilot-shaped adapter — args-form sandbox, JSONL streaming — parses,

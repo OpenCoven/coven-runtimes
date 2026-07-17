@@ -16,9 +16,31 @@ use coven_runtime_spec::AdapterManifest;
 use crate::sha256::sha256_hex;
 
 /// Load and parse a manifest file, with a path-tagged error on failure.
+///
+/// `conjure` is the authoring surface, so unlike the spec's tolerant parse it
+/// rejects fields no spec version recognizes — typos must fail here, before a
+/// manifest reaches the registry or a runtime host.
 pub(crate) fn load_manifest(path: &Path) -> Result<AdapterManifest> {
     let raw = fs::read_to_string(path)
         .with_context(|| format!("failed to read manifest {}", path.display()))?;
+    let value: serde_json::Value = serde_json::from_str(&raw)
+        .with_context(|| format!("failed to parse manifest {}", path.display()))?;
+    let unknown = coven_runtime_spec::unknown_manifest_fields(&value);
+    if !unknown.is_empty() {
+        // The most common shape mistake first: a registry index run as a
+        // manifest must not surface as a pile of "unknown field" errors.
+        if value.get("runtimes").is_some() && value.get("adapters").is_none() {
+            anyhow::bail!(
+                "{} looks like a registry index, not an adapter manifest; re-run with --registry",
+                path.display()
+            );
+        }
+        anyhow::bail!(
+            "manifest {} contains unrecognized fields (typo?): {}",
+            path.display(),
+            unknown.join(", ")
+        );
+    }
     AdapterManifest::from_json(&raw)
         .with_context(|| format!("failed to parse manifest {}", path.display()))
 }

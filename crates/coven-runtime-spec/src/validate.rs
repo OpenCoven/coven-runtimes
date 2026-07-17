@@ -244,6 +244,15 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
              `capabilities.stream` (long-lived stdin/stdout)",
         ));
     }
+    // `Unknown` only exists so newer indexes degrade gracefully on old
+    // consumers; an authored manifest must name a protocol this spec knows.
+    if adapter.event_protocol == Some(crate::manifest::EventProtocol::Unknown) {
+        errors.push(err(
+            tag(),
+            "event_protocol",
+            "unrecognized `event_protocol` value; supported: grok-headless-v1",
+        ));
+    }
 
     if let Some(continuity) = &adapter.continuity_args {
         if !continuity.has_init_launch() && !continuity.has_resume_launch() {
@@ -295,6 +304,124 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
             ));
         }
     }
+}
+
+/// Authoring-time strictness: report fields in a raw manifest JSON document
+/// that no version of this spec recognizes (typos, misplaced keys). Parsing
+/// itself is tolerant of unknown fields for forward compatibility, so this
+/// check is the authoring layer's typo guard — `conjure validate` (and
+/// `conjure`'s shared manifest loader) run it and fail on any hit.
+///
+/// The allowlists are kept in lockstep with the structs by the
+/// `unknown_field_allowlists_match_serialization` test.
+pub fn unknown_manifest_fields(raw: &serde_json::Value) -> Vec<String> {
+    const ROOT: &[&str] = &["adapters"];
+    const ADAPTER: &[&str] = &[
+        "id",
+        "label",
+        "executable",
+        "interactive_prompt_prefix_args",
+        "interactivePromptPrefixArgs",
+        "non_interactive_prompt_prefix_args",
+        "nonInteractivePromptPrefixArgs",
+        "prompt_flag",
+        "promptFlag",
+        "interactive_prompt_flag",
+        "interactivePromptFlag",
+        "install_hint",
+        "system_prompt_flag",
+        "systemPromptFlag",
+        "model_flag",
+        "modelFlag",
+        "model_arg_template",
+        "modelArgTemplate",
+        "capabilities",
+        "sandbox",
+        "stream_args",
+        "streamArgs",
+        "continuity_args",
+        "continuityArgs",
+        "event_protocol",
+        "eventProtocol",
+        "version",
+        "homepage",
+        "description",
+    ];
+    const CAPABILITIES: &[&str] = &[
+        "stream",
+        "preassigned_session_id",
+        "preassignedSessionId",
+        "think",
+        "speed",
+    ];
+    const SANDBOX: &[&str] = &[
+        "flag",
+        "full",
+        "read_only",
+        "readOnly",
+        "read-only",
+        "full_args",
+        "fullArgs",
+        "read_only_args",
+        "readOnlyArgs",
+    ];
+    const LAUNCH_ARGS: &[&str] = &[
+        "prefix_args",
+        "prefixArgs",
+        "init_prefix_args",
+        "initPrefixArgs",
+        "resume_prefix_args",
+        "resumePrefixArgs",
+        "session_id_flag",
+        "sessionIdFlag",
+        "resume_flag",
+        "resumeFlag",
+    ];
+
+    fn sweep(value: &serde_json::Value, allowed: &[&str], path: &str, out: &mut Vec<String>) {
+        let Some(object) = value.as_object() else {
+            return;
+        };
+        for key in object.keys() {
+            if !allowed.contains(&key.as_str()) {
+                out.push(format!("{path}.{key}"));
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    sweep(raw, ROOT, "manifest", &mut out);
+    let adapters = raw
+        .get("adapters")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    for (index, adapter) in adapters.iter().enumerate() {
+        let base = format!("adapters[{index}]");
+        sweep(adapter, ADAPTER, &base, &mut out);
+        if let Some(capabilities) = adapter.get("capabilities") {
+            sweep(
+                capabilities,
+                CAPABILITIES,
+                &format!("{base}.capabilities"),
+                &mut out,
+            );
+        }
+        if let Some(sandbox) = adapter.get("sandbox") {
+            sweep(sandbox, SANDBOX, &format!("{base}.sandbox"), &mut out);
+        }
+        for (field, alias) in [
+            ("stream_args", "streamArgs"),
+            ("continuity_args", "continuityArgs"),
+        ] {
+            for key in [field, alias] {
+                if let Some(args) = adapter.get(key) {
+                    sweep(args, LAUNCH_ARGS, &format!("{base}.{key}"), &mut out);
+                }
+            }
+        }
+    }
+    out
 }
 
 fn err(adapter_id: Option<String>, field: &'static str, message: &str) -> ValidationError {
@@ -608,6 +735,110 @@ mod tests {
             "{:?}",
             validate_adapter(&a)
         );
+    }
+
+    #[test]
+    fn unrecognized_event_protocol_fails_validation() {
+        let mut a = base_adapter("x");
+        a.event_protocol = Some(EventProtocol::Unknown);
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "event_protocol" && e.message.contains("unrecognized")));
+    }
+
+    /// Drift guard for the authoring allowlists: everything the structs
+    /// serialize (grok-shaped and claude-shaped, exercising every block) must
+    /// pass `unknown_manifest_fields`, camelCase alias spellings must pass,
+    /// and a typo at each nesting level must be reported.
+    #[test]
+    fn unknown_field_allowlists_match_serialization() {
+        let mut grok = base_adapter("grok");
+        grok.prompt_flag = Some("--single".into());
+        grok.interactive_prompt_flag = Some("--single".into());
+        grok.system_prompt_flag = Some("--rules".into());
+        grok.model_flag = Some("--model".into());
+        grok.model_arg_template = Some("-c model={model}".into());
+        grok.capabilities.preassigned_session_id = true;
+        grok.event_protocol = Some(EventProtocol::GrokHeadlessV1);
+        grok.sandbox = Some(SandboxMapping::Args {
+            full_args: vec!["--sandbox".into(), "off".into()],
+            read_only_args: vec!["--sandbox".into(), "read-only".into()],
+        });
+        grok.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["run".into()],
+            resume_prefix_args: vec!["run".into()],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+        grok.version = Some("1.0.0".into());
+        grok.homepage = Some("https://example.com".into());
+        grok.description = Some("desc".into());
+
+        let mut claude = base_adapter("claude-like");
+        claude.capabilities.stream = true;
+        claude.capabilities.preassigned_session_id = true;
+        claude.sandbox = Some(SandboxMapping::Flag {
+            flag: "--permission-mode".into(),
+            full: "bypassPermissions".into(),
+            read_only: "plan".into(),
+        });
+        claude.stream_args = Some(StreamArgs {
+            prefix_args: vec!["-p".into()],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+
+        let manifest = AdapterManifest {
+            adapters: vec![grok, claude],
+        };
+        let serialized = serde_json::to_value(&manifest).unwrap();
+        assert_eq!(
+            unknown_manifest_fields(&serialized),
+            Vec::<String>::new(),
+            "serialized structs must satisfy the authoring allowlists"
+        );
+
+        let camel: serde_json::Value = serde_json::from_str(
+            r#"{"adapters":[{
+                "id":"x","label":"X","executable":"x","install_hint":"hint",
+                "promptFlag":"--single","interactivePromptFlag":"--single",
+                "interactivePromptPrefixArgs":[],"nonInteractivePromptPrefixArgs":["run"],
+                "systemPromptFlag":null,"modelFlag":"--model","modelArgTemplate":null,
+                "capabilities":{"preassignedSessionId":true},
+                "sandbox":{"fullArgs":["a"],"readOnlyArgs":["b"]},
+                "streamArgs":{"prefixArgs":["-p"],"sessionIdFlag":"--session-id","resumeFlag":"--resume"},
+                "continuityArgs":{"initPrefixArgs":["run"],"resumePrefixArgs":["run"],"sessionIdFlag":"--s","resumeFlag":"--r"},
+                "eventProtocol":"grok-headless-v1"
+            }]}"#,
+        )
+        .unwrap();
+        assert_eq!(unknown_manifest_fields(&camel), Vec::<String>::new());
+
+        let typos: serde_json::Value = serde_json::from_str(
+            r#"{"adapters":[{
+                "id":"x","label":"X","executable":"x","install_hint":"hint",
+                "capabilties":{"stream":true},
+                "capabilities":{"straem":true},
+                "sandbox":{"flags":"--x"},
+                "stream_args":{"prefix_arg":["-p"]},
+                "continuity_args":{"init_prefix":["run"]}
+            }]}"#,
+        )
+        .unwrap();
+        let found = unknown_manifest_fields(&typos);
+        for expected in [
+            "adapters[0].capabilties",
+            "adapters[0].capabilities.straem",
+            "adapters[0].sandbox.flags",
+            "adapters[0].stream_args.prefix_arg",
+            "adapters[0].continuity_args.init_prefix",
+        ] {
+            assert!(
+                found.contains(&expected.to_string()),
+                "{expected} missing from {found:?}"
+            );
+        }
     }
 
     #[test]

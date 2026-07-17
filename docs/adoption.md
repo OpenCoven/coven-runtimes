@@ -99,6 +99,24 @@ verify an individual adapter you pulled, its `sha256` is the digest
 
 ---
 
+## Version compatibility when fetching the live index
+
+Consumers that use the **crate-embedded** index (`RegistryIndex::canonical()`)
+are always self-consistent: the pinned crate ships the index its own types can
+parse.
+
+Consumers that fetch the **live** `canonical/index.json` (release asset, raw
+file, or the downstream-sync dispatch below) must mind spec versions:
+
+- Spec **v0.1.4+** parses indexes containing fields or event-protocol values
+  from any newer spec: unknown fields are ignored and unknown protocols
+  degrade to a single unsupported adapter, so the rest of the index stays
+  resolvable.
+- Spec **≤ v0.1.3** rejects any index containing fields it does not know
+  (`deny_unknown_fields`), and one such entry fails the whole document — all
+  runtimes, not just the new one. If you fetch the live index, upgrade to
+  ≥ v0.1.4 before the registry accepts a runtime that uses newer fields.
+
 ## Push notifications for downstream sync
 
 Merges to `main` that touch `registry/**` (or the canonical index) fire a

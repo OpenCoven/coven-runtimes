@@ -226,6 +226,45 @@ mod tests {
         }
     }
 
+    /// Forward compatibility: an index written by a NEWER spec (unknown
+    /// adapter fields, an unrecognized event-protocol value) must parse on
+    /// this version and keep every runtime resolvable — one exotic entry must
+    /// never poison the whole index.
+    #[test]
+    fn index_from_a_newer_spec_version_stays_resolvable() {
+        let raw = r#"{
+          "format": "1",
+          "runtimes": {
+            "hermes": [{
+              "version": "1.0.0",
+              "adapter": {
+                "id": "hermes", "label": "Hermes", "executable": "hermes",
+                "non_interactive_prompt_prefix_args": ["chat"],
+                "install_hint": "install hermes"
+              }
+            }],
+            "futuristic": [{
+              "version": "2.0.0",
+              "adapter": {
+                "id": "futuristic", "label": "Futuristic", "executable": "futuristic",
+                "non_interactive_prompt_prefix_args": ["go"],
+                "install_hint": "install futuristic",
+                "event_protocol": "hyperspace-jsonl-v3",
+                "teleportation_args": { "warp": 9 }
+              }
+            }]
+          }
+        }"#;
+        let index = RegistryIndex::from_json(raw).expect("newer-spec index parses");
+        assert_eq!(index.runtime_ids(), ["futuristic", "hermes"]);
+        assert!(index.resolve_latest("hermes").is_ok());
+        let futuristic = index.resolve_latest("futuristic").expect("resolvable");
+        assert_eq!(
+            futuristic.adapter.event_protocol,
+            Some(coven_runtime_spec::EventProtocol::Unknown)
+        );
+    }
+
     fn entry(id: &str, version: &str, yanked: bool) -> RegistryEntry {
         RegistryEntry {
             version: version.into(),

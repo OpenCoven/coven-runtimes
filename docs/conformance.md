@@ -139,6 +139,27 @@ long-lived bidirectional process.
 
 `version` (semver), `homepage` (URL), `description` (one line).
 
+## Unknown fields & forward compatibility
+
+Two layers with different strictness:
+
+- **Parsing is tolerant.** `coven-runtime-spec` ignores fields it does not
+  recognize, and an unrecognized `event_protocol` value parses as an internal
+  `Unknown` marker. A registry index written by a newer spec version therefore
+  still loads on older consumers, degrading only the affected adapter instead
+  of failing the whole document. (Spec versions ≤ 0.1.3 predate this rule and
+  reject any index containing newer fields — see
+  [`adoption.md`](adoption.md).)
+- **Authoring is strict.** `conjure` rejects any field no spec version
+  recognizes (`unknown_manifest_fields`), and the JSON Schema declares
+  `additionalProperties: false`, so typos fail before a manifest reaches the
+  registry. `validate_manifest` also rejects an `Unknown` event protocol: an
+  authored manifest must name a protocol its target spec knows.
+
+The `sandbox` object keeps strict field matching in both layers: its two
+structural forms are distinguished by their field sets, so evolving the
+sandbox shape is a spec-version event, not a silently-ignorable addition.
+
 ## Validation rules (summary)
 
 `conjure validate` reports **all** problems in one pass:
@@ -160,6 +181,9 @@ long-lived bidirectional process.
     `session_id_flag` requires `capabilities.preassigned_session_id`
     (no dead config).
 11. `event_protocol` and `capabilities.stream` are mutually exclusive.
+12. An `event_protocol` value the spec does not recognize fails validation
+    (parse-level `Unknown` is for index consumers, never for authored
+    manifests).
 
 ## Conformance probe (`conjure test`)
 
