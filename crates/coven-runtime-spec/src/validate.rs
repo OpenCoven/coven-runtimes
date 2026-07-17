@@ -365,9 +365,15 @@ pub fn unknown_manifest_fields(raw: &serde_json::Value) -> Vec<String> {
         "read_only_args",
         "readOnlyArgs",
     ];
-    const LAUNCH_ARGS: &[&str] = &[
+    const STREAM_ARGS: &[&str] = &[
         "prefix_args",
         "prefixArgs",
+        "session_id_flag",
+        "sessionIdFlag",
+        "resume_flag",
+        "resumeFlag",
+    ];
+    const CONTINUITY_ARGS: &[&str] = &[
         "init_prefix_args",
         "initPrefixArgs",
         "resume_prefix_args",
@@ -410,13 +416,16 @@ pub fn unknown_manifest_fields(raw: &serde_json::Value) -> Vec<String> {
         if let Some(sandbox) = adapter.get("sandbox") {
             sweep(sandbox, SANDBOX, &format!("{base}.sandbox"), &mut out);
         }
-        for (field, alias) in [
-            ("stream_args", "streamArgs"),
-            ("continuity_args", "continuityArgs"),
+        // Each launch-args block gets its own allowlist so a key nested in
+        // the wrong block (e.g. `init_prefix_args` under `stream_args`) is
+        // reported, not just globally-unknown names.
+        for (field, alias, allowed) in [
+            ("stream_args", "streamArgs", STREAM_ARGS),
+            ("continuity_args", "continuityArgs", CONTINUITY_ARGS),
         ] {
             for key in [field, alias] {
                 if let Some(args) = adapter.get(key) {
-                    sweep(args, LAUNCH_ARGS, &format!("{base}.{key}"), &mut out);
+                    sweep(args, allowed, &format!("{base}.{key}"), &mut out);
                 }
             }
         }
@@ -821,8 +830,8 @@ mod tests {
                 "capabilties":{"stream":true},
                 "capabilities":{"straem":true},
                 "sandbox":{"flags":"--x"},
-                "stream_args":{"prefix_arg":["-p"]},
-                "continuity_args":{"init_prefix":["run"]}
+                "stream_args":{"prefix_arg":["-p"],"init_prefix_args":["mis-nested"]},
+                "continuity_args":{"init_prefix":["run"],"prefix_args":["mis-nested"]}
             }]}"#,
         )
         .unwrap();
@@ -832,7 +841,9 @@ mod tests {
             "adapters[0].capabilities.straem",
             "adapters[0].sandbox.flags",
             "adapters[0].stream_args.prefix_arg",
+            "adapters[0].stream_args.init_prefix_args",
             "adapters[0].continuity_args.init_prefix",
+            "adapters[0].continuity_args.prefix_args",
         ] {
             assert!(
                 found.contains(&expected.to_string()),
