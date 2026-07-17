@@ -18,7 +18,7 @@
       ],
       "prompt_flag": "--single",
       "interactive_prompt_flag": "--single",
-      "install_hint": "Install Grok Build with `curl -fsSL https://x.ai/cli/install.sh | bash` or `npm install -g @xai-official/grok`; make sure `grok` is on PATH and run `grok login` (or set XAI_API_KEY for headless auth), then retry `coven adapter doctor grok`.",
+      "install_hint": "Install Grok Build with `npm install -g @xai-official/grok` or via the official install guide at https://docs.x.ai/build; make sure `grok` is on PATH and run `grok login` (or set XAI_API_KEY for headless auth), then retry `coven adapter doctor grok`.",
       "system_prompt_flag": "--rules",
       "model_flag": "--model",
       "capabilities": {

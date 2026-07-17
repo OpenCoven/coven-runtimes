@@ -276,7 +276,7 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
         if !stream_flag && !continuity_flag {
             errors.push(err(
                 tag(),
-                "capabilities.preassignedSessionId",
+                "capabilities.preassigned_session_id",
                 "declares preassigned session id but no session id flag in \
                  `stream_args` or `continuity_args`",
             ));
@@ -431,7 +431,7 @@ mod tests {
         let errs = validate_adapter(&a);
         assert!(errs
             .iter()
-            .any(|e| e.field == "capabilities.preassignedSessionId"));
+            .any(|e| e.field == "capabilities.preassigned_session_id"));
     }
 
     /// A continuity-only session-id flag (no stream mode at all) satisfies the
