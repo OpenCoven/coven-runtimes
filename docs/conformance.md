@@ -34,8 +34,8 @@ parse; canonical output is snake_case.
 |-----------------|------|-------|
 | `interactive_prompt_prefix_args` (`interactivePromptPrefixArgs`) | string[] | argv prefix for interactive launch; prompt appended last. |
 | `non_interactive_prompt_prefix_args` (`nonInteractivePromptPrefixArgs`) | string[] | argv prefix for one-shot launch; prompt appended last. |
-| `prompt_flag` (`promptFlag`) | string \| null | Binds the one-shot prompt as `--flag=<prompt>` for runtimes with no positional prompt slot (Copilot `--prompt`, Grok Build `--single`). `null` ⇒ prompt is the final positional. |
-| `interactive_prompt_flag` (`interactivePromptFlag`) | string \| null | Binds the prompt for an interactive-with-prompt launch (Copilot `--interactive`). |
+| `prompt_flag` (`promptFlag`) | string \| null | Binds the one-shot prompt as `--flag=<prompt>` for runtimes with no positional prompt slot (Copilot `--prompt`, Grok Build `--single`). `null` ⇒ prompt is the final positional. **Non-blank when present.** |
+| `interactive_prompt_flag` (`interactivePromptFlag`) | string \| null | Binds the prompt for an interactive-with-prompt launch (Copilot `--interactive`). **Non-blank when present.** |
 | `system_prompt_flag` (`systemPromptFlag`) | string \| null | Flag that injects a system prompt (e.g. `--append-system-prompt`). `null` ⇒ identity is prepended to the prompt instead. |
 
 ### Model selection
@@ -157,10 +157,12 @@ Two layers with different strictness:
   authored manifest must name a protocol its target spec knows.
 
 `conjure` applies the strict layer to **registry indexes too** (`validate
---registry`, `registry build`, `registry yank`): its flows load and rewrite
+--registry`, `registry build`, `registry yank`): those flows load and rewrite
 the whole index, so content from a newer spec refuses to load rather than
 being silently dropped or rewritten. Upgrade `conjure` before mutating an
-index produced by a newer spec.
+index produced by a newer spec. The read-only `registry list` uses the
+tolerant layer instead — one newer entry must not make every runtime
+unlistable.
 
 The `sandbox` object keeps strict field matching in both layers: its two
 structural forms are distinguished by their field sets, so evolving the

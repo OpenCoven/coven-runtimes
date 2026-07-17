@@ -45,14 +45,16 @@
         "install_hint": { "type": "string", "minLength": 1 },
         "prompt_flag": {
           "type": ["string", "null"],
-          "description": "Flag that binds the one-shot prompt as `--flag=<prompt>` for runtimes with no positional prompt slot (e.g. `--single`). null/absent ⇒ prompt is the final positional argument."
+          "minLength": 1,
+          "description": "Flag that binds the one-shot prompt as `--flag=<prompt>` for runtimes with no positional prompt slot (e.g. `--single`). null/absent ⇒ prompt is the final positional argument. Must be non-blank when present."
         },
-        "promptFlag": { "type": ["string", "null"] },
+        "promptFlag": { "type": ["string", "null"], "minLength": 1 },
         "interactive_prompt_flag": {
           "type": ["string", "null"],
-          "description": "Flag that binds the prompt for an interactive-with-prompt launch (e.g. `--interactive`)."
+          "minLength": 1,
+          "description": "Flag that binds the prompt for an interactive-with-prompt launch (e.g. `--interactive`). Must be non-blank when present."
         },
-        "interactivePromptFlag": { "type": ["string", "null"] },
+        "interactivePromptFlag": { "type": ["string", "null"], "minLength": 1 },
         "system_prompt_flag": { "type": ["string", "null"] },
         "systemPromptFlag": { "type": ["string", "null"] },
         "model_flag": { "type": ["string", "null"] },

@@ -62,6 +62,18 @@ pub(crate) fn manifest_digest(manifest: &AdapterManifest) -> Result<String> {
     Ok(sha256_hex(canonical_manifest(manifest)?.as_bytes()))
 }
 
+/// Load a registry index tolerantly — read-only consumers (e.g. `registry
+/// list`) must keep working on an index written by a newer spec: unknown
+/// fields are ignored and newer protocol values degrade per-adapter, instead
+/// of one unfamiliar entry making every runtime unlistable. Mutating and
+/// authoring flows use the strict [`load_registry`].
+pub(crate) fn load_registry_tolerant(path: &Path) -> Result<RegistryIndex> {
+    let raw = fs::read_to_string(path)
+        .with_context(|| format!("failed to read registry index {}", path.display()))?;
+    RegistryIndex::from_json(&raw)
+        .with_context(|| format!("failed to parse registry index {}", path.display()))
+}
+
 /// Load and parse a registry index file, with a path-tagged error on failure.
 ///
 /// Strict like [`load_manifest`]: `conjure`'s registry flows rewrite the whole

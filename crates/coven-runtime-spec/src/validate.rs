@@ -140,6 +140,28 @@ fn validate_adapter_into(adapter: &RuntimeAdapter, errors: &mut Vec<ValidationEr
         }
     }
 
+    // ── prompt binding ──────────────────────────────────────────────────────
+    // A present-but-blank flag would make consumers emit a malformed
+    // `=<prompt>` argument instead of falling back to a positional prompt.
+    if let Some(flag) = adapter.prompt_flag.as_deref() {
+        if flag.trim().is_empty() {
+            errors.push(err(
+                tag(),
+                "prompt_flag",
+                "`prompt_flag` must not be blank; omit it for a positional prompt",
+            ));
+        }
+    }
+    if let Some(flag) = adapter.interactive_prompt_flag.as_deref() {
+        if flag.trim().is_empty() {
+            errors.push(err(
+                tag(),
+                "interactive_prompt_flag",
+                "`interactive_prompt_flag` must not be blank; omit it for a positional prompt",
+            ));
+        }
+    }
+
     // ── model selection ─────────────────────────────────────────────────────
     if let Some(template) = adapter.model_arg_template.as_deref() {
         if !template.contains("{model}") {
@@ -780,6 +802,29 @@ mod tests {
             validate_adapter(&a).is_empty(),
             "{:?}",
             validate_adapter(&a)
+        );
+    }
+
+    #[test]
+    fn blank_prompt_flags_are_rejected() {
+        let mut a = base_adapter("x");
+        a.prompt_flag = Some("".into());
+        a.interactive_prompt_flag = Some("  ".into());
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "prompt_flag" && e.message.contains("must not be blank")));
+        assert!(errs.iter().any(
+            |e| e.field == "interactive_prompt_flag" && e.message.contains("must not be blank")
+        ));
+
+        let mut ok = base_adapter("y");
+        ok.prompt_flag = Some("--single".into());
+        ok.interactive_prompt_flag = Some("--single".into());
+        assert!(
+            validate_adapter(&ok).is_empty(),
+            "{:?}",
+            validate_adapter(&ok)
         );
     }
 
