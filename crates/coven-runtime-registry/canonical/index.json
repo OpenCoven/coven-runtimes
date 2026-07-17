@@ -139,6 +139,75 @@
         "published_at": "2026-07-12T17:10:36Z"
       }
     ],
+    "grok": [
+      {
+        "version": "1.0.0",
+        "adapter": {
+          "id": "grok",
+          "label": "Grok Build",
+          "executable": "grok",
+          "interactive_prompt_prefix_args": [
+            "--no-auto-update",
+            "--no-alt-screen",
+            "--output-format",
+            "streaming-json"
+          ],
+          "non_interactive_prompt_prefix_args": [
+            "--no-auto-update",
+            "--no-alt-screen",
+            "--output-format",
+            "streaming-json"
+          ],
+          "prompt_flag": "--single",
+          "interactive_prompt_flag": "--single",
+          "install_hint": "Install Grok Build with `curl -fsSL https://x.ai/cli/install.sh | bash` or `npm install -g @xai-official/grok`; make sure `grok` is on PATH and run `grok login` (or set XAI_API_KEY for headless auth), then retry `coven adapter doctor grok`.",
+          "system_prompt_flag": "--rules",
+          "model_flag": "--model",
+          "capabilities": {
+            "stream": false,
+            "preassigned_session_id": true,
+            "think": false,
+            "speed": false
+          },
+          "sandbox": {
+            "full_args": [
+              "--permission-mode",
+              "bypassPermissions",
+              "--sandbox",
+              "off"
+            ],
+            "read_only_args": [
+              "--permission-mode",
+              "default",
+              "--sandbox",
+              "read-only"
+            ]
+          },
+          "continuity_args": {
+            "init_prefix_args": [
+              "--no-auto-update",
+              "--no-alt-screen",
+              "--output-format",
+              "streaming-json"
+            ],
+            "resume_prefix_args": [
+              "--no-auto-update",
+              "--no-alt-screen",
+              "--output-format",
+              "streaming-json"
+            ],
+            "session_id_flag": "--session-id",
+            "resume_flag": "--resume"
+          },
+          "event_protocol": "grok-headless-v1",
+          "version": "1.0.0",
+          "homepage": "https://docs.x.ai/build/cli/headless-scripting",
+          "description": "xAI Grok Build adapter. Finite one-shot headless runs via `--single=<prompt>` with the `grok-headless-v1` stdout event protocol (`--output-format streaming-json`); the host translates text/end/error frames and suppresses thought frames. Session pre-assignment via `--session-id`, cold-start resume via `--resume`. Permission mapping uses the argv-list sandbox form to drive both `--permission-mode` and `--sandbox`. No stream mode: every turn is a fresh process."
+        },
+        "sha256": "90096feadbcd52172c60944cb1d4dace0dd1bb315b756f24bc5422e8dd1226d6",
+        "published_at": "2026-07-17T13:42:00Z"
+      }
+    ],
     "hermes": [
       {
         "version": "1.0.0",

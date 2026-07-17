@@ -6,7 +6,12 @@
 //! new capability model introduces:
 //!
 //! - `capabilities.stream` requires `stream_args`.
-//! - `capabilities.preassigned_session_id` requires `stream_args.session_id_flag`.
+//! - `capabilities.preassigned_session_id` requires a session id flag in
+//!   `stream_args` or `continuity_args`.
+//! - `continuity_args` must declare a usable init or resume launch, and its
+//!   `session_id_flag` is dead config without `preassigned_session_id`.
+//! - `event_protocol` (finite one-shot stdout) and `capabilities.stream`
+//!   (long-lived stdin/stdout) are mutually exclusive.
 //! - a `sandbox` mapping must have a non-empty flag and both values (flag
 //!   form), or a non-empty argv list per policy (args form).
 //! - `model_arg_template` must contain the `{model}` placeholder.
@@ -228,17 +233,52 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
         (None, false) => {}
     }
 
+    // A finite event bridge and a long-lived stream are distinct process
+    // contracts and cannot both own stdout (mirrors coven's loader check).
+    if adapter.event_protocol.is_some() && stream {
+        errors.push(err(
+            tag(),
+            "event_protocol",
+            "cannot declare both an `event_protocol` (one-shot stdout) and \
+             `capabilities.stream` (long-lived stdin/stdout)",
+        ));
+    }
+
+    if let Some(continuity) = &adapter.continuity_args {
+        if !continuity.has_init_launch() && !continuity.has_resume_launch() {
+            errors.push(err(
+                tag(),
+                "continuity_args",
+                "provides `continuity_args` but no usable init or resume launch args",
+            ));
+        }
+        if continuity.session_id_flag().is_some() && !preassigned_session_id {
+            errors.push(err(
+                tag(),
+                "continuity_args.session_id_flag",
+                "provides `continuity_args.session_id_flag` but \
+                 `capabilities.preassigned_session_id` is false (dead config)",
+            ));
+        }
+    }
+
     if preassigned_session_id {
-        let has_flag = adapter
+        let stream_flag = adapter
             .stream_args
             .as_ref()
             .and_then(|a| a.session_id_flag.as_deref())
             .is_some_and(|f| !f.trim().is_empty());
-        if !has_flag {
+        let continuity_flag = adapter
+            .continuity_args
+            .as_ref()
+            .and_then(|a| a.session_id_flag())
+            .is_some();
+        if !stream_flag && !continuity_flag {
             errors.push(err(
                 tag(),
                 "capabilities.preassignedSessionId",
-                "declares preassigned session id but no `stream_args.session_id_flag`",
+                "declares preassigned session id but no session id flag in \
+                 `stream_args` or `continuity_args`",
             ));
         }
     }
@@ -283,7 +323,7 @@ pub fn valid_registry_version(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::StreamArgs;
+    use crate::manifest::{ContinuityArgs, EventProtocol, StreamArgs};
     use crate::sandbox::SandboxMapping;
 
     fn base_adapter(id: &str) -> RuntimeAdapter {
@@ -293,6 +333,8 @@ mod tests {
             executable: "test".into(),
             interactive_prompt_prefix_args: vec![],
             non_interactive_prompt_prefix_args: vec!["exec".into()],
+            prompt_flag: None,
+            interactive_prompt_flag: None,
             install_hint: "install it".into(),
             system_prompt_flag: None,
             model_flag: None,
@@ -300,6 +342,8 @@ mod tests {
             capabilities: Capabilities::BASELINE,
             sandbox: None,
             stream_args: None,
+            continuity_args: None,
+            event_protocol: None,
             version: None,
             homepage: None,
             description: None,
@@ -388,6 +432,73 @@ mod tests {
         assert!(errs
             .iter()
             .any(|e| e.field == "capabilities.preassignedSessionId"));
+    }
+
+    /// A continuity-only session-id flag (no stream mode at all) satisfies the
+    /// preassigned-session requirement — the Grok Build shape.
+    #[test]
+    fn preassigned_session_accepts_continuity_flag() {
+        let mut a = base_adapter("grok");
+        a.capabilities.preassigned_session_id = true;
+        a.event_protocol = Some(EventProtocol::GrokHeadlessV1);
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["--output-format".into(), "streaming-json".into()],
+            resume_prefix_args: vec!["--output-format".into(), "streaming-json".into()],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+        assert!(
+            validate_adapter(&a).is_empty(),
+            "{:?}",
+            validate_adapter(&a)
+        );
+    }
+
+    #[test]
+    fn event_protocol_conflicts_with_stream() {
+        let mut a = base_adapter("x");
+        a.capabilities.stream = true;
+        a.stream_args = Some(StreamArgs {
+            prefix_args: vec!["-p".into()],
+            session_id_flag: None,
+            resume_flag: None,
+        });
+        a.event_protocol = Some(EventProtocol::GrokHeadlessV1);
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "event_protocol" && e.message.contains("cannot declare both")));
+    }
+
+    #[test]
+    fn continuity_args_require_a_usable_launch() {
+        let mut a = base_adapter("x");
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["  ".into()],
+            resume_prefix_args: vec![],
+            session_id_flag: None,
+            resume_flag: None,
+        });
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "continuity_args" && e.message.contains("no usable init")));
+    }
+
+    #[test]
+    fn continuity_session_flag_without_capability_is_dead_config() {
+        let mut a = base_adapter("x");
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec![],
+            resume_prefix_args: vec![],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: None,
+        });
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "continuity_args.session_id_flag"
+                && e.message.contains("dead config")));
     }
 
     #[test]
