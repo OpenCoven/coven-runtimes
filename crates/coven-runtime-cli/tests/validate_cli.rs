@@ -111,6 +111,40 @@ fn registry_index_without_flag_fails_loudly() {
 }
 
 #[test]
+fn registry_with_typoed_entry_field_is_rejected() {
+    // Tolerant crate-level parsing must not let `validate --registry` bless a
+    // typo: the strict raw check refuses unrecognized index content.
+    let dir = tempdir().unwrap();
+    let path = write(
+        dir.path(),
+        "index.json",
+        r#"{
+          "format": "1",
+          "runtimes": {
+            "hermes": [{
+              "version": "1.0.0",
+              "adapter": {
+                "id": "hermes", "label": "Hermes", "executable": "hermes",
+                "install_hint": "install",
+                "capabilties": { "stream": true }
+              }
+            }]
+          }
+        }"#,
+    );
+    let out = conjure()
+        .arg("validate")
+        .arg("--registry")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("does not recognize"), "{stderr}");
+    assert!(stderr.contains("capabilties"), "{stderr}");
+}
+
+#[test]
 fn registry_id_key_mismatch_is_rejected() {
     let dir = tempdir().unwrap();
     let path = write(dir.path(), "index.json", REGISTRY_MISMATCH_JSON);

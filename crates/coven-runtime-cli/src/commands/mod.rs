@@ -63,9 +63,27 @@ pub(crate) fn manifest_digest(manifest: &AdapterManifest) -> Result<String> {
 }
 
 /// Load and parse a registry index file, with a path-tagged error on failure.
+///
+/// Strict like [`load_manifest`]: `conjure`'s registry flows rewrite the whole
+/// index (`registry yank`, `registry build`), so content this spec version
+/// does not recognize must refuse to load rather than be silently dropped or
+/// rewritten — typos on the validate path, newer-spec content on the mutation
+/// path.
 pub(crate) fn load_registry(path: &Path) -> Result<RegistryIndex> {
     let raw = fs::read_to_string(path)
         .with_context(|| format!("failed to read registry index {}", path.display()))?;
+    let value: serde_json::Value = serde_json::from_str(&raw)
+        .with_context(|| format!("failed to parse registry index {}", path.display()))?;
+    let unknown = coven_runtime_registry::unknown_index_fields(&value);
+    if !unknown.is_empty() {
+        anyhow::bail!(
+            "registry index {} contains content this conjure does not recognize \
+             (typo, or written by a newer spec — upgrade conjure before validating \
+             or mutating it): {}",
+            path.display(),
+            unknown.join(", ")
+        );
+    }
     RegistryIndex::from_json(&raw)
         .with_context(|| format!("failed to parse registry index {}", path.display()))
 }

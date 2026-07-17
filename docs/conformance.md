@@ -156,6 +156,12 @@ Two layers with different strictness:
   registry. `validate_manifest` also rejects an `Unknown` event protocol: an
   authored manifest must name a protocol its target spec knows.
 
+`conjure` applies the strict layer to **registry indexes too** (`validate
+--registry`, `registry build`, `registry yank`): its flows load and rewrite
+the whole index, so content from a newer spec refuses to load rather than
+being silently dropped or rewritten. Upgrade `conjure` before mutating an
+index produced by a newer spec.
+
 The `sandbox` object keeps strict field matching in both layers: its two
 structural forms are distinguished by their field sets, so evolving the
 sandbox shape is a spec-version event, not a silently-ignorable addition.

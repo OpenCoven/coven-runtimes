@@ -306,6 +306,145 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
     }
 }
 
+const MANIFEST_ROOT_FIELDS: &[&str] = &["adapters"];
+const ADAPTER_FIELDS: &[&str] = &[
+    "id",
+    "label",
+    "executable",
+    "interactive_prompt_prefix_args",
+    "interactivePromptPrefixArgs",
+    "non_interactive_prompt_prefix_args",
+    "nonInteractivePromptPrefixArgs",
+    "prompt_flag",
+    "promptFlag",
+    "interactive_prompt_flag",
+    "interactivePromptFlag",
+    "install_hint",
+    "system_prompt_flag",
+    "systemPromptFlag",
+    "model_flag",
+    "modelFlag",
+    "model_arg_template",
+    "modelArgTemplate",
+    "capabilities",
+    "sandbox",
+    "stream_args",
+    "streamArgs",
+    "continuity_args",
+    "continuityArgs",
+    "event_protocol",
+    "eventProtocol",
+    "version",
+    "homepage",
+    "description",
+];
+const CAPABILITIES_FIELDS: &[&str] = &[
+    "stream",
+    "preassigned_session_id",
+    "preassignedSessionId",
+    "think",
+    "speed",
+];
+const SANDBOX_FIELDS: &[&str] = &[
+    "flag",
+    "full",
+    "read_only",
+    "readOnly",
+    "read-only",
+    "full_args",
+    "fullArgs",
+    "read_only_args",
+    "readOnlyArgs",
+];
+const STREAM_ARGS_FIELDS: &[&str] = &[
+    "prefix_args",
+    "prefixArgs",
+    "session_id_flag",
+    "sessionIdFlag",
+    "resume_flag",
+    "resumeFlag",
+];
+const CONTINUITY_ARGS_FIELDS: &[&str] = &[
+    "init_prefix_args",
+    "initPrefixArgs",
+    "resume_prefix_args",
+    "resumePrefixArgs",
+    "session_id_flag",
+    "sessionIdFlag",
+    "resume_flag",
+    "resumeFlag",
+];
+
+fn sweep(value: &serde_json::Value, allowed: &[&str], path: &str, out: &mut Vec<String>) {
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    for key in object.keys() {
+        if !allowed.contains(&key.as_str()) {
+            out.push(format!("{path}.{key}"));
+        }
+    }
+}
+
+/// Report content inside one raw adapter object that this spec version does
+/// not recognize: unknown keys at every nesting level (with per-block
+/// allowlists, so a key in the wrong block is flagged too) and an
+/// `event_protocol` string value that parses to [`EventProtocol::Unknown`].
+/// Paths are prefixed with `base` (e.g. `adapters[0]`).
+///
+/// Shared by [`unknown_manifest_fields`] and the registry's raw index check so
+/// `conjure` — the authoring and mutation surface — can refuse content it
+/// would otherwise silently drop or rewrite.
+pub fn unknown_adapter_fields(adapter: &serde_json::Value, base: &str) -> Vec<String> {
+    use crate::manifest::EventProtocol;
+
+    let mut out = Vec::new();
+    sweep(adapter, ADAPTER_FIELDS, base, &mut out);
+    if let Some(capabilities) = adapter.get("capabilities") {
+        sweep(
+            capabilities,
+            CAPABILITIES_FIELDS,
+            &format!("{base}.capabilities"),
+            &mut out,
+        );
+    }
+    if let Some(sandbox) = adapter.get("sandbox") {
+        sweep(
+            sandbox,
+            SANDBOX_FIELDS,
+            &format!("{base}.sandbox"),
+            &mut out,
+        );
+    }
+    // Each launch-args block gets its own allowlist so a key nested in the
+    // wrong block (e.g. `init_prefix_args` under `stream_args`) is reported,
+    // not just globally-unknown names.
+    for (field, alias, allowed) in [
+        ("stream_args", "streamArgs", STREAM_ARGS_FIELDS),
+        ("continuity_args", "continuityArgs", CONTINUITY_ARGS_FIELDS),
+    ] {
+        for key in [field, alias] {
+            if let Some(args) = adapter.get(key) {
+                sweep(args, allowed, &format!("{base}.{key}"), &mut out);
+            }
+        }
+    }
+    // A protocol string that parses to `Unknown` is content from a newer
+    // spec, not a typo the field sweep can see — report it explicitly.
+    for key in ["event_protocol", "eventProtocol"] {
+        if let Some(value) = adapter.get(key) {
+            if !value.is_null()
+                && serde_json::from_value::<EventProtocol>(value.clone())
+                    .map(|protocol| protocol == EventProtocol::Unknown)
+                    .unwrap_or(true)
+            {
+                out.push(format!("{base}.{key} (unrecognized value {value})"));
+            }
+        }
+    }
+    out
+}
+
 /// Authoring-time strictness: report fields in a raw manifest JSON document
 /// that no version of this spec recognizes (typos, misplaced keys). Parsing
 /// itself is tolerant of unknown fields for forward compatibility, so this
@@ -315,120 +454,18 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
 /// The allowlists are kept in lockstep with the structs by the
 /// `unknown_field_allowlists_match_serialization` test.
 pub fn unknown_manifest_fields(raw: &serde_json::Value) -> Vec<String> {
-    const ROOT: &[&str] = &["adapters"];
-    const ADAPTER: &[&str] = &[
-        "id",
-        "label",
-        "executable",
-        "interactive_prompt_prefix_args",
-        "interactivePromptPrefixArgs",
-        "non_interactive_prompt_prefix_args",
-        "nonInteractivePromptPrefixArgs",
-        "prompt_flag",
-        "promptFlag",
-        "interactive_prompt_flag",
-        "interactivePromptFlag",
-        "install_hint",
-        "system_prompt_flag",
-        "systemPromptFlag",
-        "model_flag",
-        "modelFlag",
-        "model_arg_template",
-        "modelArgTemplate",
-        "capabilities",
-        "sandbox",
-        "stream_args",
-        "streamArgs",
-        "continuity_args",
-        "continuityArgs",
-        "event_protocol",
-        "eventProtocol",
-        "version",
-        "homepage",
-        "description",
-    ];
-    const CAPABILITIES: &[&str] = &[
-        "stream",
-        "preassigned_session_id",
-        "preassignedSessionId",
-        "think",
-        "speed",
-    ];
-    const SANDBOX: &[&str] = &[
-        "flag",
-        "full",
-        "read_only",
-        "readOnly",
-        "read-only",
-        "full_args",
-        "fullArgs",
-        "read_only_args",
-        "readOnlyArgs",
-    ];
-    const STREAM_ARGS: &[&str] = &[
-        "prefix_args",
-        "prefixArgs",
-        "session_id_flag",
-        "sessionIdFlag",
-        "resume_flag",
-        "resumeFlag",
-    ];
-    const CONTINUITY_ARGS: &[&str] = &[
-        "init_prefix_args",
-        "initPrefixArgs",
-        "resume_prefix_args",
-        "resumePrefixArgs",
-        "session_id_flag",
-        "sessionIdFlag",
-        "resume_flag",
-        "resumeFlag",
-    ];
-
-    fn sweep(value: &serde_json::Value, allowed: &[&str], path: &str, out: &mut Vec<String>) {
-        let Some(object) = value.as_object() else {
-            return;
-        };
-        for key in object.keys() {
-            if !allowed.contains(&key.as_str()) {
-                out.push(format!("{path}.{key}"));
-            }
-        }
-    }
-
     let mut out = Vec::new();
-    sweep(raw, ROOT, "manifest", &mut out);
+    sweep(raw, MANIFEST_ROOT_FIELDS, "manifest", &mut out);
     let adapters = raw
         .get("adapters")
         .and_then(serde_json::Value::as_array)
         .map(Vec::as_slice)
         .unwrap_or_default();
     for (index, adapter) in adapters.iter().enumerate() {
-        let base = format!("adapters[{index}]");
-        sweep(adapter, ADAPTER, &base, &mut out);
-        if let Some(capabilities) = adapter.get("capabilities") {
-            sweep(
-                capabilities,
-                CAPABILITIES,
-                &format!("{base}.capabilities"),
-                &mut out,
-            );
-        }
-        if let Some(sandbox) = adapter.get("sandbox") {
-            sweep(sandbox, SANDBOX, &format!("{base}.sandbox"), &mut out);
-        }
-        // Each launch-args block gets its own allowlist so a key nested in
-        // the wrong block (e.g. `init_prefix_args` under `stream_args`) is
-        // reported, not just globally-unknown names.
-        for (field, alias, allowed) in [
-            ("stream_args", "streamArgs", STREAM_ARGS),
-            ("continuity_args", "continuityArgs", CONTINUITY_ARGS),
-        ] {
-            for key in [field, alias] {
-                if let Some(args) = adapter.get(key) {
-                    sweep(args, allowed, &format!("{base}.{key}"), &mut out);
-                }
-            }
-        }
+        out.extend(unknown_adapter_fields(
+            adapter,
+            &format!("adapters[{index}]"),
+        ));
     }
     out
 }
