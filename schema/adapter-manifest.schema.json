@@ -159,8 +159,8 @@
       }
     },
     "eventProtocol": {
-      "type": "string",
-      "enum": ["grok-headless-v1"],
+      "type": ["string", "null"],
+      "enum": ["grok-headless-v1", null],
       "description": "Machine-readable stdout protocol for a finite one-shot headless run, translated by the host. Mutually exclusive with capabilities.stream. `grok-headless-v1` is Grok Build's public `--output-format streaming-json` schema."
     }
   }

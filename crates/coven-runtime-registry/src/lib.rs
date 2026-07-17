@@ -93,13 +93,9 @@ pub fn unknown_index_fields(raw: &serde_json::Value) -> Vec<String> {
 
     let mut out = Vec::new();
     sweep(raw, INDEX_FIELDS, "index", &mut out);
-    let runtimes = raw
-        .get("runtimes")
-        .and_then(serde_json::Value::as_object)
-        .cloned()
-        .unwrap_or_default();
-    for (runtime_id, entries) in &runtimes {
-        let entries = entries.as_array().cloned().unwrap_or_default();
+    let runtimes = raw.get("runtimes").and_then(serde_json::Value::as_object);
+    for (runtime_id, entries) in runtimes.into_iter().flatten() {
+        let entries = entries.as_array().map(Vec::as_slice).unwrap_or_default();
         for (position, entry) in entries.iter().enumerate() {
             let base = format!("runtimes.{runtime_id}[{position}]");
             sweep(entry, ENTRY_FIELDS, &base, &mut out);

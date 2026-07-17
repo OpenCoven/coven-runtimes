@@ -41,7 +41,7 @@ pub(crate) fn load_manifest(path: &Path) -> Result<AdapterManifest> {
             unknown.join(", ")
         );
     }
-    AdapterManifest::from_json(&raw)
+    serde_json::from_value(value)
         .with_context(|| format!("failed to parse manifest {}", path.display()))
 }
 
@@ -84,6 +84,6 @@ pub(crate) fn load_registry(path: &Path) -> Result<RegistryIndex> {
             unknown.join(", ")
         );
     }
-    RegistryIndex::from_json(&raw)
+    serde_json::from_value(value)
         .with_context(|| format!("failed to parse registry index {}", path.display()))
 }
