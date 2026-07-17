@@ -6,8 +6,9 @@
 //! new capability model introduces:
 //!
 //! - `capabilities.stream` requires `stream_args`.
-//! - `capabilities.preassigned_session_id` requires a session id flag in
-//!   `stream_args` or `continuity_args`.
+//! - `capabilities.preassigned_session_id` requires the session id flag on the
+//!   active launch path: `stream_args.session_id_flag` for streaming adapters,
+//!   `continuity_args.session_id_flag` otherwise.
 //! - `continuity_args` must declare a usable init or resume launch, and its
 //!   `session_id_flag` is dead config without `preassigned_session_id`.
 //! - `event_protocol` (finite one-shot stdout) and `capabilities.stream`
@@ -273,12 +274,24 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
             .as_ref()
             .and_then(|a| a.session_id_flag())
             .is_some();
-        if !stream_flag && !continuity_flag {
+        // The flag must live on the launch path that actually runs: a
+        // streaming adapter receives the pre-assigned id through
+        // `stream_args`, so a continuity-only flag would validate here but
+        // never reach the streaming process.
+        if stream && !stream_flag {
             errors.push(err(
                 tag(),
                 "capabilities.preassigned_session_id",
-                "declares preassigned session id but no session id flag in \
-                 `stream_args` or `continuity_args`",
+                "declares preassigned session id with stream mode but no \
+                 `stream_args.session_id_flag` (a streaming launch cannot \
+                 receive the id through `continuity_args`)",
+            ));
+        } else if !stream && !continuity_flag {
+            errors.push(err(
+                tag(),
+                "capabilities.preassigned_session_id",
+                "declares preassigned session id but no \
+                 `continuity_args.session_id_flag`",
             ));
         }
     }
@@ -432,6 +445,31 @@ mod tests {
         assert!(errs
             .iter()
             .any(|e| e.field == "capabilities.preassigned_session_id"));
+    }
+
+    /// A streaming adapter must carry the session flag in `stream_args`; a
+    /// continuity-only flag cannot reach a streaming launch (Codex review).
+    #[test]
+    fn preassigned_streaming_session_rejects_continuity_only_flag() {
+        let mut a = base_adapter("x");
+        a.capabilities.stream = true;
+        a.capabilities.preassigned_session_id = true;
+        a.stream_args = Some(StreamArgs {
+            prefix_args: vec!["-p".into()],
+            session_id_flag: None,
+            resume_flag: None,
+        });
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["--print".into()],
+            resume_prefix_args: vec!["--print".into()],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "capabilities.preassigned_session_id"
+                && e.message.contains("stream_args.session_id_flag")));
     }
 
     /// A continuity-only session-id flag (no stream mode at all) satisfies the

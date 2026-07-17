@@ -56,7 +56,7 @@ baseline of a plain one-shot CLI). These replace coven's hardcoded
 | Field (aliases) | Mirrors coven predicate | Requires |
 |-----------------|-------------------------|----------|
 | `stream` | `harness_supports_stream_mode` | `stream_args` (non-empty `prefix_args`) |
-| `preassigned_session_id` (`preassignedSessionId`) | `harness_supports_preassigned_session_id` | a `session_id_flag` in `stream_args` or `continuity_args` |
+| `preassigned_session_id` (`preassignedSessionId`) | `harness_supports_preassigned_session_id` | `stream_args.session_id_flag` when `stream`, else `continuity_args.session_id_flag` |
 | `think` | `harness_supports_think` | — |
 | `speed` | `harness_supports_speed` | — |
 
@@ -152,8 +152,9 @@ long-lived bidirectional process.
    form) or ≥1 non-empty token in each of `full_args` / `read_only_args`
    (args form).
 7. `capabilities.stream` ⇒ `stream_args` with non-empty `prefix_args`.
-8. `capabilities.preassigned_session_id` ⇒ a `session_id_flag` in
-   `stream_args` or `continuity_args`.
+8. `capabilities.preassigned_session_id` ⇒ the session id flag on the active
+   launch path: `stream_args.session_id_flag` for streaming adapters,
+   `continuity_args.session_id_flag` otherwise.
 9. `stream_args` present ⇒ `capabilities.stream` true (no dead config).
 10. `continuity_args` present ⇒ a usable init or resume launch; its
     `session_id_flag` requires `capabilities.preassigned_session_id`
