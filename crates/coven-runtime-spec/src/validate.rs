@@ -11,8 +11,6 @@
 //!   `continuity_args.session_id_flag` otherwise.
 //! - `continuity_args` must declare a usable init or resume launch, and its
 //!   `session_id_flag` is dead config without `preassigned_session_id`.
-//! - `event_protocol` (finite one-shot stdout) and `capabilities.stream`
-//!   (long-lived stdin/stdout) are mutually exclusive.
 //! - a `sandbox` mapping must have a non-empty flag and both values (flag
 //!   form), or a non-empty argv list per policy (args form).
 //! - `model_arg_template` must contain the `{model}` placeholder.
@@ -256,26 +254,6 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
         (None, false) => {}
     }
 
-    // A finite event bridge and a long-lived stream are distinct process
-    // contracts and cannot both own stdout (mirrors coven's loader check).
-    if adapter.event_protocol.is_some() && stream {
-        errors.push(err(
-            tag(),
-            "event_protocol",
-            "cannot declare both an `event_protocol` (one-shot stdout) and \
-             `capabilities.stream` (long-lived stdin/stdout)",
-        ));
-    }
-    // `Unknown` only exists so newer indexes degrade gracefully on old
-    // consumers; an authored manifest must name a protocol this spec knows.
-    if adapter.event_protocol == Some(crate::manifest::EventProtocol::Unknown) {
-        errors.push(err(
-            tag(),
-            "event_protocol",
-            "unrecognized `event_protocol` value; supported: grok-headless-v1",
-        ));
-    }
-
     if let Some(continuity) = &adapter.continuity_args {
         if !continuity.has_init_launch() && !continuity.has_resume_launch() {
             errors.push(err(
@@ -354,8 +332,6 @@ const ADAPTER_FIELDS: &[&str] = &[
     "streamArgs",
     "continuity_args",
     "continuityArgs",
-    "event_protocol",
-    "eventProtocol",
     "version",
     "homepage",
     "description",
@@ -410,16 +386,13 @@ fn sweep(value: &serde_json::Value, allowed: &[&str], path: &str, out: &mut Vec<
 
 /// Report content inside one raw adapter object that this spec version does
 /// not recognize: unknown keys at every nesting level (with per-block
-/// allowlists, so a key in the wrong block is flagged too) and an
-/// `event_protocol` string value that parses to [`EventProtocol::Unknown`].
+/// allowlists, so a key in the wrong block is flagged too).
 /// Paths are prefixed with `base` (e.g. `adapters[0]`).
 ///
 /// Shared by [`unknown_manifest_fields`] and the registry's raw index check so
 /// `conjure` — the authoring and mutation surface — can refuse content it
 /// would otherwise silently drop or rewrite.
 pub fn unknown_adapter_fields(adapter: &serde_json::Value, base: &str) -> Vec<String> {
-    use crate::manifest::EventProtocol;
-
     let mut out = Vec::new();
     sweep(adapter, ADAPTER_FIELDS, base, &mut out);
     if let Some(capabilities) = adapter.get("capabilities") {
@@ -448,19 +421,6 @@ pub fn unknown_adapter_fields(adapter: &serde_json::Value, base: &str) -> Vec<St
         for key in [field, alias] {
             if let Some(args) = adapter.get(key) {
                 sweep(args, allowed, &format!("{base}.{key}"), &mut out);
-            }
-        }
-    }
-    // A protocol string that parses to `Unknown` is content from a newer
-    // spec, not a typo the field sweep can see — report it explicitly.
-    for key in ["event_protocol", "eventProtocol"] {
-        if let Some(value) = adapter.get(key) {
-            if !value.is_null()
-                && serde_json::from_value::<EventProtocol>(value.clone())
-                    .map(|protocol| protocol == EventProtocol::Unknown)
-                    .unwrap_or(true)
-            {
-                out.push(format!("{base}.{key} (unrecognized value {value})"));
             }
         }
     }
@@ -531,7 +491,7 @@ pub fn valid_registry_version(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{ContinuityArgs, EventProtocol, StreamArgs};
+    use crate::manifest::{ContinuityArgs, StreamArgs};
     use crate::sandbox::SandboxMapping;
 
     fn base_adapter(id: &str) -> RuntimeAdapter {
@@ -551,7 +511,6 @@ mod tests {
             sandbox: None,
             stream_args: None,
             continuity_args: None,
-            event_protocol: None,
             version: None,
             homepage: None,
             description: None,
@@ -673,10 +632,9 @@ mod tests {
     fn preassigned_session_accepts_continuity_flag() {
         let mut a = base_adapter("grok");
         a.capabilities.preassigned_session_id = true;
-        a.event_protocol = Some(EventProtocol::GrokHeadlessV1);
         a.continuity_args = Some(ContinuityArgs {
-            init_prefix_args: vec!["--output-format".into(), "streaming-json".into()],
-            resume_prefix_args: vec!["--output-format".into(), "streaming-json".into()],
+            init_prefix_args: vec!["--output-format".into(), "plain".into()],
+            resume_prefix_args: vec!["--output-format".into(), "plain".into()],
             session_id_flag: Some("--session-id".into()),
             resume_flag: Some("--resume".into()),
         });
@@ -685,22 +643,6 @@ mod tests {
             "{:?}",
             validate_adapter(&a)
         );
-    }
-
-    #[test]
-    fn event_protocol_conflicts_with_stream() {
-        let mut a = base_adapter("x");
-        a.capabilities.stream = true;
-        a.stream_args = Some(StreamArgs {
-            prefix_args: vec!["-p".into()],
-            session_id_flag: None,
-            resume_flag: None,
-        });
-        a.event_protocol = Some(EventProtocol::GrokHeadlessV1);
-        let errs = validate_adapter(&a);
-        assert!(errs
-            .iter()
-            .any(|e| e.field == "event_protocol" && e.message.contains("cannot declare both")));
     }
 
     #[test]
@@ -828,16 +770,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn unrecognized_event_protocol_fails_validation() {
-        let mut a = base_adapter("x");
-        a.event_protocol = Some(EventProtocol::Unknown);
-        let errs = validate_adapter(&a);
-        assert!(errs
-            .iter()
-            .any(|e| e.field == "event_protocol" && e.message.contains("unrecognized")));
-    }
-
     /// Drift guard for the authoring allowlists: everything the structs
     /// serialize (grok-shaped and claude-shaped, exercising every block) must
     /// pass `unknown_manifest_fields`, camelCase alias spellings must pass,
@@ -851,7 +783,6 @@ mod tests {
         grok.model_flag = Some("--model".into());
         grok.model_arg_template = Some("-c model={model}".into());
         grok.capabilities.preassigned_session_id = true;
-        grok.event_protocol = Some(EventProtocol::GrokHeadlessV1);
         grok.sandbox = Some(SandboxMapping::Args {
             full_args: vec!["--sandbox".into(), "off".into()],
             read_only_args: vec!["--sandbox".into(), "read-only".into()],
@@ -899,8 +830,7 @@ mod tests {
                 "capabilities":{"preassignedSessionId":true},
                 "sandbox":{"fullArgs":["a"],"readOnlyArgs":["b"]},
                 "streamArgs":{"prefixArgs":["-p"],"sessionIdFlag":"--session-id","resumeFlag":"--resume"},
-                "continuityArgs":{"initPrefixArgs":["run"],"resumePrefixArgs":["run"],"sessionIdFlag":"--s","resumeFlag":"--r"},
-                "eventProtocol":"grok-headless-v1"
+                "continuityArgs":{"initPrefixArgs":["run"],"resumePrefixArgs":["run"],"sessionIdFlag":"--s","resumeFlag":"--r"}
             }]}"#,
         )
         .unwrap();

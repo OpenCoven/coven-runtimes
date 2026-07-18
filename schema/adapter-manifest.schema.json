@@ -70,8 +70,6 @@
         "streamArgs": { "$ref": "#/definitions/streamArgs" },
         "continuity_args": { "$ref": "#/definitions/continuityArgs" },
         "continuityArgs": { "$ref": "#/definitions/continuityArgs" },
-        "event_protocol": { "$ref": "#/definitions/eventProtocol" },
-        "eventProtocol": { "$ref": "#/definitions/eventProtocol" },
         "version": { "type": "string" },
         "homepage": { "type": "string" },
         "description": { "type": "string" }
@@ -159,11 +157,6 @@
         "resume_flag": { "type": ["string", "null"] },
         "resumeFlag": { "type": ["string", "null"] }
       }
-    },
-    "eventProtocol": {
-      "type": ["string", "null"],
-      "enum": ["grok-headless-v1", null],
-      "description": "Machine-readable stdout protocol for a finite one-shot headless run, translated by the host. Mutually exclusive with capabilities.stream. `grok-headless-v1` is Grok Build's public `--output-format streaming-json` schema."
     }
   }
 }

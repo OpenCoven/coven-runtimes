@@ -150,17 +150,17 @@
             "--no-auto-update",
             "--no-alt-screen",
             "--output-format",
-            "streaming-json"
+            "plain"
           ],
           "non_interactive_prompt_prefix_args": [
             "--no-auto-update",
             "--no-alt-screen",
             "--output-format",
-            "streaming-json"
+            "plain"
           ],
           "prompt_flag": "--single",
           "interactive_prompt_flag": "--single",
-          "install_hint": "Install Grok Build with `npm install -g @xai-official/grok` or via the official install guide at https://docs.x.ai/build; make sure `grok` is on PATH and run `grok login` (or set XAI_API_KEY for headless auth), then retry `coven adapter doctor grok`.",
+          "install_hint": "Install Grok Build with the official installer: `curl -fsSL https://x.ai/cli/install.sh | bash` (macOS/Linux) or `irm https://x.ai/cli/install.ps1 | iex` (Windows PowerShell) — see https://docs.x.ai/build. Make sure `grok` is on PATH and run `grok login` (or set XAI_API_KEY for headless auth), then retry `coven adapter doctor grok`.",
           "system_prompt_flag": "--rules",
           "model_flag": "--model",
           "capabilities": {
@@ -188,24 +188,23 @@
               "--no-auto-update",
               "--no-alt-screen",
               "--output-format",
-              "streaming-json"
+              "plain"
             ],
             "resume_prefix_args": [
               "--no-auto-update",
               "--no-alt-screen",
               "--output-format",
-              "streaming-json"
+              "plain"
             ],
             "session_id_flag": "--session-id",
             "resume_flag": "--resume"
           },
-          "event_protocol": "grok-headless-v1",
           "version": "1.0.0",
           "homepage": "https://docs.x.ai/build/cli/headless-scripting",
-          "description": "xAI Grok Build adapter. Finite one-shot headless runs via `--single=<prompt>` with the `grok-headless-v1` stdout event protocol (`--output-format streaming-json`); the host translates text/end/error frames and suppresses thought frames. Session pre-assignment via `--session-id`, cold-start resume via `--resume`. Permission mapping uses the argv-list sandbox form to drive both `--permission-mode` and `--sandbox`. No stream mode: every turn is a fresh process."
+          "description": "xAI Grok Build adapter. Finite one-shot headless runs via `--single=<prompt>` in Grok's plain output mode (`--output-format plain`, its own default): stdout carries only the final response text, reasoning is dropped at the source, and errors go to stderr — no event protocol or translation layer. Session pre-assignment via `--session-id`, cold-start resume via `--resume`. Permission mapping uses the argv-list sandbox form to drive both `--permission-mode` and `--sandbox`. No stream mode: every turn is a fresh process."
         },
-        "sha256": "56bf68dee3e7b32390efa0a78905e326cf82dd8a2e5ba47b65bd6feedfdcb80e",
-        "published_at": "2026-07-17T14:11:03Z"
+        "sha256": "026cb95c8f5c6f75a1929efa453c4521218e039d30a054c0fab820ead580819d",
+        "published_at": "2026-07-18T15:41:26Z"
       }
     ],
     "hermes": [

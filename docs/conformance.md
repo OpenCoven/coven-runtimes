@@ -122,19 +122,6 @@ stream mode (GitHub Copilot CLI, Grok Build).
 `continuity_args` must declare a **usable init or resume launch**: a non-blank
 `session_id_flag`/`resume_flag` or at least one non-blank prefix token.
 
-### Event protocol
-
-`event_protocol` (`eventProtocol`) string enum (optional). Declares that the
-runtime's **finite one-shot** headless process emits a machine-readable stdout
-protocol the host translates into its own event model. Mutually exclusive with
-`capabilities.stream`: an event protocol exits after each prompt (continuity
-rides `continuity_args` cold-start resume), while stream mode is one
-long-lived bidirectional process.
-
-| Value | Meaning |
-|-------|---------|
-| `grok-headless-v1` | Grok Build's public `--output-format streaming-json` schema (`text`/`thought`/`end`/`error` frames; unknown frame types are ignored by the host for forward compatibility). |
-
 ### Registry metadata (optional; ignored by coven core)
 
 `version` (semver), `homepage` (URL), `description` (one line).
@@ -144,8 +131,7 @@ long-lived bidirectional process.
 Two layers with different strictness:
 
 - **Parsing is tolerant.** `coven-runtime-spec` ignores fields it does not
-  recognize, and an unrecognized `event_protocol` value parses as an internal
-  `Unknown` marker. A registry index written by a newer spec version therefore
+  recognize. A registry index written by a newer spec version therefore
   still loads on older consumers, degrading only the affected adapter instead
   of failing the whole document. (Spec versions ≤ 0.1.3 predate this rule and
   reject any index containing newer fields — see
@@ -153,8 +139,7 @@ Two layers with different strictness:
 - **Authoring is strict.** `conjure` rejects any field no spec version
   recognizes (`unknown_manifest_fields`), and the JSON Schema declares
   `additionalProperties: false`, so typos fail before a manifest reaches the
-  registry. `validate_manifest` also rejects an `Unknown` event protocol: an
-  authored manifest must name a protocol its target spec knows.
+  registry.
 
 `conjure` applies the strict layer to **registry indexes too** (`validate
 --registry`, `registry build`, `registry yank`): those flows load and rewrite
@@ -188,10 +173,6 @@ sandbox shape is a spec-version event, not a silently-ignorable addition.
 10. `continuity_args` present ⇒ a usable init or resume launch; its
     `session_id_flag` requires `capabilities.preassigned_session_id`
     (no dead config).
-11. `event_protocol` and `capabilities.stream` are mutually exclusive.
-12. An `event_protocol` value the spec does not recognize fails validation
-    (parse-level `Unknown` is for index consumers, never for authored
-    manifests).
 
 ## Conformance probe (`conjure test`)
 

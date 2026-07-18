@@ -132,25 +132,6 @@ impl ContinuityArgs {
     }
 }
 
-/// Machine-readable stdout protocol emitted by a **finite** one-shot runtime
-/// process. Unlike [`Capabilities::stream`] (a long-lived bidirectional
-/// process), an event protocol describes a process that exits after each
-/// prompt; conversation continuity rides [`ContinuityArgs`] cold-start resume.
-/// The host translates the runtime's native frames into its own event model.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum EventProtocol {
-    /// Grok Build's public `--output-format streaming-json` headless schema.
-    GrokHeadlessV1,
-    /// A protocol value this spec version does not recognize. Never written by
-    /// valid manifests ([`crate::validate_manifest`] rejects it); exists so a
-    /// registry index containing a *newer* protocol degrades to one
-    /// unsupported adapter on old consumers instead of failing the whole
-    /// index parse.
-    #[serde(other)]
-    Unknown,
-}
-
 /// A single runtime adapter definition.
 ///
 /// Field names and `camelCase` aliases match coven's `ExternalHarnessAdapterSpec`
@@ -231,15 +212,6 @@ pub struct RuntimeAdapter {
         skip_serializing_if = "Option::is_none"
     )]
     pub continuity_args: Option<ContinuityArgs>,
-    /// Machine-readable stdout protocol for a finite one-shot headless run.
-    /// Mutually exclusive with `capabilities.stream`: the former exits after
-    /// one prompt, the latter is a long-lived bidirectional process.
-    #[serde(
-        default,
-        alias = "eventProtocol",
-        skip_serializing_if = "Option::is_none"
-    )]
-    pub event_protocol: Option<EventProtocol>,
 
     // ── Registry metadata (optional; ignored by coven core) ──────────────────
     /// Semver of this adapter definition, for the registry index.
@@ -304,7 +276,6 @@ mod tests {
         assert!(hermes.prompt_flag.is_none());
         assert!(hermes.interactive_prompt_flag.is_none());
         assert!(hermes.continuity_args.is_none());
-        assert!(hermes.event_protocol.is_none());
         assert!(!hermes.supports_model());
         assert!(!hermes.supports_permission());
     }
@@ -332,25 +303,23 @@ mod tests {
     }
 
     /// Forward compatibility: a manifest written by a NEWER spec version (with
-    /// fields this version has never heard of) must still parse, and a newer
-    /// event-protocol value must degrade to `Unknown` rather than failing the
-    /// document. Typo strictness is the authoring layer's job
+    /// fields this version has never heard of) must still parse rather than
+    /// failing the document. Typo strictness is the authoring layer's job
     /// (`unknown_manifest_fields` + the JSON Schema via `conjure validate`).
     #[test]
-    fn tolerates_fields_and_protocols_from_newer_spec_versions() {
+    fn tolerates_fields_from_newer_spec_versions() {
         let raw = r#"{
           "adapters": [{
             "id": "x", "label": "X", "executable": "x",
             "install_hint": "hint",
             "future_field": { "from": "v9" },
-            "event_protocol": "sonnet-headless-v9",
+            "event_protocol": "from-a-newer-spec",
             "capabilities": { "stream": false, "future_capability": true }
           }]
         }"#;
         let manifest = AdapterManifest::from_json(raw).expect("newer-spec manifest parses");
         let adapter = &manifest.adapters[0];
         assert_eq!(adapter.id, "x");
-        assert_eq!(adapter.event_protocol, Some(EventProtocol::Unknown));
         assert!(!adapter.capabilities.stream);
     }
 
@@ -395,7 +364,7 @@ mod tests {
         assert_eq!(m, reparsed);
     }
 
-    /// A Grok-Build-shaped adapter — flag-bound prompt, finite event protocol,
+    /// A Grok-Build-shaped adapter — flag-bound prompt, plain one-shot output,
     /// cold-start continuity instead of stream mode — parses, exposes the right
     /// surface, and round-trips losslessly.
     #[test]
@@ -403,19 +372,18 @@ mod tests {
         let raw = r#"{
           "adapters": [{
             "id": "grok", "label": "Grok Build", "executable": "grok",
-            "interactive_prompt_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "streaming-json"],
-            "non_interactive_prompt_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "streaming-json"],
+            "interactive_prompt_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "plain"],
+            "non_interactive_prompt_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "plain"],
             "install_hint": "Install Grok Build and run `grok login`.",
             "system_prompt_flag": "--rules",
             "prompt_flag": "--single",
             "interactive_prompt_flag": "--single",
             "model_flag": "--model",
             "capabilities": { "stream": false, "preassigned_session_id": true },
-            "event_protocol": "grok-headless-v1",
             "sandbox": { "full_args": ["--permission-mode", "bypassPermissions", "--sandbox", "off"], "read_only_args": ["--permission-mode", "default", "--sandbox", "read-only"] },
             "continuity_args": {
-              "init_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "streaming-json"],
-              "resume_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "streaming-json"],
+              "init_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "plain"],
+              "resume_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "plain"],
               "session_id_flag": "--session-id",
               "resume_flag": "--resume"
             },
@@ -426,7 +394,6 @@ mod tests {
         let a = &m.adapters[0];
         assert_eq!(a.prompt_flag.as_deref(), Some("--single"));
         assert_eq!(a.interactive_prompt_flag.as_deref(), Some("--single"));
-        assert_eq!(a.event_protocol, Some(EventProtocol::GrokHeadlessV1));
         assert!(!a.capabilities.stream);
         assert!(a.capabilities.preassigned_session_id);
         let continuity = a.continuity_args.as_ref().unwrap();
@@ -440,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn accepts_camel_case_aliases_for_continuity_and_protocol() {
+    fn accepts_camel_case_aliases_for_continuity() {
         let raw = r#"{
           "adapters": [{
             "id": "x", "label": "X", "executable": "x",
@@ -448,7 +415,6 @@ mod tests {
             "promptFlag": "--single",
             "interactivePromptFlag": "--single",
             "capabilities": { "preassignedSessionId": true },
-            "eventProtocol": "grok-headless-v1",
             "continuityArgs": { "initPrefixArgs": ["run"], "sessionIdFlag": "--session-id", "resumeFlag": "--resume" }
           }]
         }"#;
@@ -456,7 +422,6 @@ mod tests {
         let a = &m.adapters[0];
         assert_eq!(a.prompt_flag.as_deref(), Some("--single"));
         assert_eq!(a.interactive_prompt_flag.as_deref(), Some("--single"));
-        assert_eq!(a.event_protocol, Some(EventProtocol::GrokHeadlessV1));
         let continuity = a.continuity_args.as_ref().unwrap();
         assert_eq!(continuity.init_prefix_args, vec!["run"]);
         assert_eq!(continuity.session_id_flag(), Some("--session-id"));

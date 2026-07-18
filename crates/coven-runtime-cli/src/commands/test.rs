@@ -213,7 +213,6 @@ mod tests {
             prompt_flag: None,
             interactive_prompt_flag: None,
             continuity_args: None,
-            event_protocol: None,
             version: None,
             homepage: None,
             description: None,

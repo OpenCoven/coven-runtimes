@@ -71,7 +71,7 @@ fn is_false(b: &bool) -> bool {
 
 /// Report content inside a raw registry-index JSON document that this spec
 /// version does not recognize: unknown keys at the index, entry, and adapter
-/// levels, plus event-protocol values newer than this spec. `conjure` — the
+/// levels. `conjure` — the
 /// authoring and mutation surface — refuses an index with any hits, because
 /// its load-rewrite flows (e.g. `registry yank`) would silently drop that
 /// content; the tolerant [`RegistryIndex::from_json`] parse is for read-only
@@ -260,7 +260,6 @@ mod tests {
             prompt_flag: None,
             interactive_prompt_flag: None,
             continuity_args: None,
-            event_protocol: None,
             version: None,
             homepage: None,
             description: None,
@@ -315,15 +314,14 @@ mod tests {
         assert!(
             found
                 .iter()
-                .any(|f| f.contains("event_protocol (unrecognized value")),
-            "protocol value missing from {found:?}"
+                .any(|f| f == "runtimes.hermes[0].adapter.event_protocol"),
+            "unknown adapter field missing from {found:?}"
         );
     }
 
     /// Forward compatibility: an index written by a NEWER spec (unknown
-    /// adapter fields, an unrecognized event-protocol value) must parse on
-    /// this version and keep every runtime resolvable — one exotic entry must
-    /// never poison the whole index.
+    /// adapter fields) must parse on this version and keep every runtime
+    /// resolvable — one exotic entry must never poison the whole index.
     #[test]
     fn index_from_a_newer_spec_version_stays_resolvable() {
         let raw = r#"{
@@ -353,10 +351,7 @@ mod tests {
         assert_eq!(index.runtime_ids(), ["futuristic", "hermes"]);
         assert!(index.resolve_latest("hermes").is_ok());
         let futuristic = index.resolve_latest("futuristic").expect("resolvable");
-        assert_eq!(
-            futuristic.adapter.event_protocol,
-            Some(coven_runtime_spec::EventProtocol::Unknown)
-        );
+        assert_eq!(futuristic.adapter.id, "futuristic");
     }
 
     fn entry(id: &str, version: &str, yanked: bool) -> RegistryEntry {

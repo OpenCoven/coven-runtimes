@@ -31,7 +31,7 @@ pub mod sandbox;
 pub mod validate;
 
 pub use capabilities::Capabilities;
-pub use manifest::{AdapterManifest, ContinuityArgs, EventProtocol, RuntimeAdapter, StreamArgs};
+pub use manifest::{AdapterManifest, ContinuityArgs, RuntimeAdapter, StreamArgs};
 pub use sandbox::{Permission, SandboxMapping};
 pub use validate::{
     unknown_adapter_fields, unknown_manifest_fields, validate_adapter, validate_manifest,
