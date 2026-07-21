@@ -339,7 +339,9 @@ mod tests {
     fn canonical_index_resolves_seeded_runtimes() {
         let idx = RegistryIndex::canonical();
         // The seeded accepted runtimes must resolve by "latest".
-        assert!(idx.resolve_latest("hermes").is_ok());
+        let hermes = idx.resolve_latest("hermes").expect("Hermes resolves");
+        assert_eq!(hermes.version, "1.0.2");
+        assert_eq!(hermes.adapter.model_flag.as_deref(), Some("--model"));
         assert!(idx.resolve_latest("copilot").is_ok());
     }
 }
