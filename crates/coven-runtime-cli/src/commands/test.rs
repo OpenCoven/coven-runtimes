@@ -228,7 +228,8 @@ mod tests {
         // `--help`, so this exercises a real probe without relying on a
         // Unix-only command such as `true`.
         let executable = std::env::current_exe().unwrap();
-        let a = adapter(executable.to_str().unwrap());
+        let executable = executable.to_string_lossy();
+        let a = adapter(&executable);
         match probe_adapter(&a, Some("--help")) {
             ProbeResult::Ok { .. } => {}
             other => panic!("expected Ok, got {:?}", DebugProbe(&other)),
