@@ -223,10 +223,13 @@ mod tests {
     }
 
     #[test]
-    fn probe_runs_real_binary_true() {
-        // `true` exists on every unix and exits 0 with no output.
-        let a = adapter("true");
-        match probe_adapter(&a, Some("--version")) {
+    fn probe_runs_current_test_binary() {
+        // The test harness is a platform-native executable that supports
+        // `--help`, so this exercises a real probe without relying on a
+        // Unix-only command such as `true`.
+        let executable = std::env::current_exe().unwrap();
+        let a = adapter(executable.to_str().unwrap());
+        match probe_adapter(&a, Some("--help")) {
             ProbeResult::Ok { .. } => {}
             other => panic!("expected Ok, got {:?}", DebugProbe(&other)),
         }
@@ -256,7 +259,7 @@ mod tests {
 
     #[test]
     fn soft_warnings_flag_absent_declared_flags() {
-        let a = adapter("true");
+        let a = adapter("probe");
         // Empty probe output => both declared flags (model, sandbox) warn.
         let warnings = soft_flag_warnings(&a, "");
         assert_eq!(warnings.len(), 2);
