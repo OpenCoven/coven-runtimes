@@ -35,12 +35,12 @@ fn hermes_shim_preserves_model_before_remapping_the_prompt() {
     let output = Command::new("bash")
         .arg(workspace_root().join("shims/hermes-coven"))
         .args([
+            "--model",
+            "gpt-5.6-terra",
             "chat",
             "--source",
             "coven",
             "-Q",
-            "--model",
-            "gpt-5.6-terra",
             "--",
             "hello from Coven",
         ])
