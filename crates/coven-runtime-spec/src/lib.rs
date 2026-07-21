@@ -33,7 +33,10 @@ pub mod validate;
 pub use capabilities::Capabilities;
 pub use manifest::{AdapterManifest, RuntimeAdapter, StreamArgs};
 pub use sandbox::{Permission, SandboxMapping};
-pub use validate::{validate_adapter, validate_manifest, ValidationError, BUILT_IN_IDS};
+pub use validate::{
+    parse_registry_version, valid_registry_version, validate_adapter, validate_manifest,
+    ValidationError, BUILT_IN_IDS,
+};
 
 /// The manifest schema version this crate implements. Bumped on
 /// backward-incompatible changes to [`RuntimeAdapter`].
