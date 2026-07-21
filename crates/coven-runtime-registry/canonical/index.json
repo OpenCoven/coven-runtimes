@@ -201,6 +201,37 @@
         },
         "sha256": "8b6f75dcbf8aa107308abc43853e633f668358214106008a0133b907e40aa942",
         "published_at": "2026-07-12T22:14:31Z"
+      },
+      {
+        "version": "1.0.2",
+        "adapter": {
+          "id": "hermes",
+          "label": "Hermes Agent",
+          "executable": "hermes-coven",
+          "interactive_prompt_prefix_args": [
+            "chat",
+            "--source",
+            "coven"
+          ],
+          "non_interactive_prompt_prefix_args": [
+            "chat",
+            "--source",
+            "coven",
+            "-Q"
+          ],
+          "install_hint": "Install Hermes Agent, add it to PATH, install the hermes-coven shim, and complete Hermes setup before using this adapter.",
+          "model_flag": "--model",
+          "capabilities": {
+            "stream": false,
+            "preassigned_session_id": false,
+            "think": false,
+            "speed": false
+          },
+          "version": "1.0.2",
+          "description": "Hermes adapter with native model forwarding. Uses the hermes-coven shim so the harness trailing positional prompt is remapped to hermes chat -q/--query without changing model arguments."
+        },
+        "sha256": "d0ecc06979bb868e6ebf742a8babafbc2f39a759d369876096f919c4060ed7f1",
+        "published_at": "2026-07-21T21:54:28Z"
       }
     ],
     "opencode": [
