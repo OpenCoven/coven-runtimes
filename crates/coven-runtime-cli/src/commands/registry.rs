@@ -22,7 +22,9 @@ use clap::{Args, Subcommand};
 use coven_runtime_registry::{RegistryEntry, RegistryIndex, ResolveError, INDEX_FORMAT};
 use coven_runtime_spec::{parse_registry_version, validate_manifest};
 
-use super::{canonical_manifest, load_manifest, load_registry, manifest_digest};
+use super::{
+    canonical_manifest, load_manifest, load_registry, load_registry_tolerant, manifest_digest,
+};
 use crate::datetime::now_iso8601;
 
 /// Default location of the source manifests (relative to the repo root).
@@ -323,7 +325,9 @@ fn run_add(args: AddArgs) -> Result<()> {
 }
 
 fn run_list(args: ListArgs) -> Result<()> {
-    let index = load_registry(&args.index)?;
+    // Read-only: stay listable even when the index was written by a newer
+    // spec (strict loading is for flows that validate or rewrite the index).
+    let index = load_registry_tolerant(&args.index)?;
     if index.runtimes.is_empty() {
         println!("(no accepted runtimes)");
         return Ok(());

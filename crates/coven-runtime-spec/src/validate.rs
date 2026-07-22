@@ -6,7 +6,11 @@
 //! new capability model introduces:
 //!
 //! - `capabilities.stream` requires `stream_args`.
-//! - `capabilities.preassigned_session_id` requires `stream_args.session_id_flag`.
+//! - `capabilities.preassigned_session_id` requires the session id flag on the
+//!   active launch path: `stream_args.session_id_flag` for streaming adapters,
+//!   `continuity_args.session_id_flag` otherwise.
+//! - `continuity_args` must declare a usable init or resume launch, and its
+//!   `session_id_flag` is dead config without `preassigned_session_id`.
 //! - a `sandbox` mapping must have a non-empty flag and both values (flag
 //!   form), or a non-empty argv list per policy (args form).
 //! - `model_arg_template` must contain the `{model}` placeholder.
@@ -134,6 +138,28 @@ fn validate_adapter_into(adapter: &RuntimeAdapter, errors: &mut Vec<ValidationEr
         }
     }
 
+    // ── prompt binding ──────────────────────────────────────────────────────
+    // A present-but-blank flag would make consumers emit a malformed
+    // `=<prompt>` argument instead of falling back to a positional prompt.
+    if let Some(flag) = adapter.prompt_flag.as_deref() {
+        if flag.trim().is_empty() {
+            errors.push(err(
+                tag(),
+                "prompt_flag",
+                "`prompt_flag` must not be blank; omit it for a positional prompt",
+            ));
+        }
+    }
+    if let Some(flag) = adapter.interactive_prompt_flag.as_deref() {
+        if flag.trim().is_empty() {
+            errors.push(err(
+                tag(),
+                "interactive_prompt_flag",
+                "`interactive_prompt_flag` must not be blank; omit it for a positional prompt",
+            ));
+        }
+    }
+
     // ── model selection ─────────────────────────────────────────────────────
     if let Some(template) = adapter.model_arg_template.as_deref() {
         if !template.contains("{model}") {
@@ -228,20 +254,213 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
         (None, false) => {}
     }
 
+    if let Some(continuity) = &adapter.continuity_args {
+        if continuity
+            .resume_flag
+            .as_deref()
+            .is_some_and(|flag| flag.trim().is_empty())
+        {
+            errors.push(err(
+                tag(),
+                "continuity_args.resume_flag",
+                "`continuity_args.resume_flag` must not be blank; omit it for a positional resume id",
+            ));
+        }
+        if !continuity.has_init_launch() && !continuity.has_resume_launch() {
+            errors.push(err(
+                tag(),
+                "continuity_args",
+                "provides `continuity_args` but no usable init or resume launch args",
+            ));
+        }
+        if continuity.session_id_flag().is_some() && !preassigned_session_id {
+            errors.push(err(
+                tag(),
+                "continuity_args.session_id_flag",
+                "provides `continuity_args.session_id_flag` but \
+                 `capabilities.preassigned_session_id` is false (dead config)",
+            ));
+        }
+    }
+
     if preassigned_session_id {
-        let has_flag = adapter
+        let stream_flag = adapter
             .stream_args
             .as_ref()
             .and_then(|a| a.session_id_flag.as_deref())
             .is_some_and(|f| !f.trim().is_empty());
-        if !has_flag {
+        let continuity_flag = adapter
+            .continuity_args
+            .as_ref()
+            .and_then(|a| a.session_id_flag())
+            .is_some();
+        // The flag must live on the launch path that actually runs: a
+        // streaming adapter receives the pre-assigned id through
+        // `stream_args`, so a continuity-only flag would validate here but
+        // never reach the streaming process.
+        if stream && !stream_flag {
             errors.push(err(
                 tag(),
-                "capabilities.preassignedSessionId",
-                "declares preassigned session id but no `stream_args.session_id_flag`",
+                "capabilities.preassigned_session_id",
+                "declares preassigned session id with stream mode but no \
+                 `stream_args.session_id_flag` (a streaming launch cannot \
+                 receive the id through `continuity_args`)",
+            ));
+        } else if !stream && !continuity_flag {
+            errors.push(err(
+                tag(),
+                "capabilities.preassigned_session_id",
+                "declares preassigned session id but no \
+                 `continuity_args.session_id_flag`",
             ));
         }
     }
+}
+
+const MANIFEST_ROOT_FIELDS: &[&str] = &["adapters"];
+const ADAPTER_FIELDS: &[&str] = &[
+    "id",
+    "label",
+    "executable",
+    "interactive_prompt_prefix_args",
+    "interactivePromptPrefixArgs",
+    "non_interactive_prompt_prefix_args",
+    "nonInteractivePromptPrefixArgs",
+    "prompt_flag",
+    "promptFlag",
+    "interactive_prompt_flag",
+    "interactivePromptFlag",
+    "install_hint",
+    "system_prompt_flag",
+    "systemPromptFlag",
+    "model_flag",
+    "modelFlag",
+    "model_arg_template",
+    "modelArgTemplate",
+    "capabilities",
+    "sandbox",
+    "stream_args",
+    "streamArgs",
+    "continuity_args",
+    "continuityArgs",
+    "version",
+    "homepage",
+    "description",
+];
+const CAPABILITIES_FIELDS: &[&str] = &[
+    "stream",
+    "preassigned_session_id",
+    "preassignedSessionId",
+    "think",
+    "speed",
+];
+const SANDBOX_FIELDS: &[&str] = &[
+    "flag",
+    "full",
+    "read_only",
+    "readOnly",
+    "read-only",
+    "full_args",
+    "fullArgs",
+    "read_only_args",
+    "readOnlyArgs",
+];
+const STREAM_ARGS_FIELDS: &[&str] = &[
+    "prefix_args",
+    "prefixArgs",
+    "session_id_flag",
+    "sessionIdFlag",
+    "resume_flag",
+    "resumeFlag",
+];
+const CONTINUITY_ARGS_FIELDS: &[&str] = &[
+    "init_prefix_args",
+    "initPrefixArgs",
+    "resume_prefix_args",
+    "resumePrefixArgs",
+    "session_id_flag",
+    "sessionIdFlag",
+    "resume_flag",
+    "resumeFlag",
+];
+
+fn sweep(value: &serde_json::Value, allowed: &[&str], path: &str, out: &mut Vec<String>) {
+    let Some(object) = value.as_object() else {
+        return;
+    };
+    for key in object.keys() {
+        if !allowed.contains(&key.as_str()) {
+            out.push(format!("{path}.{key}"));
+        }
+    }
+}
+
+/// Report content inside one raw adapter object that this spec version does
+/// not recognize: unknown keys at every nesting level (with per-block
+/// allowlists, so a key in the wrong block is flagged too).
+/// Paths are prefixed with `base` (e.g. `adapters[0]`).
+///
+/// Shared by [`unknown_manifest_fields`] and the registry's raw index check so
+/// `conjure` — the authoring and mutation surface — can refuse content it
+/// would otherwise silently drop or rewrite.
+pub fn unknown_adapter_fields(adapter: &serde_json::Value, base: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    sweep(adapter, ADAPTER_FIELDS, base, &mut out);
+    if let Some(capabilities) = adapter.get("capabilities") {
+        sweep(
+            capabilities,
+            CAPABILITIES_FIELDS,
+            &format!("{base}.capabilities"),
+            &mut out,
+        );
+    }
+    if let Some(sandbox) = adapter.get("sandbox") {
+        sweep(
+            sandbox,
+            SANDBOX_FIELDS,
+            &format!("{base}.sandbox"),
+            &mut out,
+        );
+    }
+    // Each launch-args block gets its own allowlist so a key nested in the
+    // wrong block (e.g. `init_prefix_args` under `stream_args`) is reported,
+    // not just globally-unknown names.
+    for (field, alias, allowed) in [
+        ("stream_args", "streamArgs", STREAM_ARGS_FIELDS),
+        ("continuity_args", "continuityArgs", CONTINUITY_ARGS_FIELDS),
+    ] {
+        for key in [field, alias] {
+            if let Some(args) = adapter.get(key) {
+                sweep(args, allowed, &format!("{base}.{key}"), &mut out);
+            }
+        }
+    }
+    out
+}
+
+/// Authoring-time strictness: report fields in a raw manifest JSON document
+/// that no version of this spec recognizes (typos, misplaced keys). Parsing
+/// itself is tolerant of unknown fields for forward compatibility, so this
+/// check is the authoring layer's typo guard — `conjure validate` (and
+/// `conjure`'s shared manifest loader) run it and fail on any hit.
+///
+/// The allowlists are kept in lockstep with the structs by the
+/// `unknown_field_allowlists_match_serialization` test.
+pub fn unknown_manifest_fields(raw: &serde_json::Value) -> Vec<String> {
+    let mut out = Vec::new();
+    sweep(raw, MANIFEST_ROOT_FIELDS, "manifest", &mut out);
+    let adapters = raw
+        .get("adapters")
+        .and_then(serde_json::Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    for (index, adapter) in adapters.iter().enumerate() {
+        out.extend(unknown_adapter_fields(
+            adapter,
+            &format!("adapters[{index}]"),
+        ));
+    }
+    out
 }
 
 fn err(adapter_id: Option<String>, field: &'static str, message: &str) -> ValidationError {
@@ -298,7 +517,7 @@ pub fn parse_registry_version(value: &str) -> Option<(u64, u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::StreamArgs;
+    use crate::manifest::{ContinuityArgs, StreamArgs};
     use crate::sandbox::SandboxMapping;
 
     fn base_adapter(id: &str) -> RuntimeAdapter {
@@ -308,6 +527,8 @@ mod tests {
             executable: "test".into(),
             interactive_prompt_prefix_args: vec![],
             non_interactive_prompt_prefix_args: vec!["exec".into()],
+            prompt_flag: None,
+            interactive_prompt_flag: None,
             install_hint: "install it".into(),
             system_prompt_flag: None,
             model_flag: None,
@@ -315,6 +536,7 @@ mod tests {
             capabilities: Capabilities::BASELINE,
             sandbox: None,
             stream_args: None,
+            continuity_args: None,
             version: None,
             homepage: None,
             description: None,
@@ -428,7 +650,82 @@ mod tests {
         let errs = validate_adapter(&a);
         assert!(errs
             .iter()
-            .any(|e| e.field == "capabilities.preassignedSessionId"));
+            .any(|e| e.field == "capabilities.preassigned_session_id"));
+    }
+
+    /// A streaming adapter must carry the session flag in `stream_args`; a
+    /// continuity-only flag cannot reach a streaming launch (Codex review).
+    #[test]
+    fn preassigned_streaming_session_rejects_continuity_only_flag() {
+        let mut a = base_adapter("x");
+        a.capabilities.stream = true;
+        a.capabilities.preassigned_session_id = true;
+        a.stream_args = Some(StreamArgs {
+            prefix_args: vec!["-p".into()],
+            session_id_flag: None,
+            resume_flag: None,
+        });
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["--print".into()],
+            resume_prefix_args: vec!["--print".into()],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "capabilities.preassigned_session_id"
+                && e.message.contains("stream_args.session_id_flag")));
+    }
+
+    /// A continuity-only session-id flag (no stream mode at all) satisfies the
+    /// preassigned-session requirement — the Grok Build shape.
+    #[test]
+    fn preassigned_session_accepts_continuity_flag() {
+        let mut a = base_adapter("grok");
+        a.capabilities.preassigned_session_id = true;
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["--output-format".into(), "plain".into()],
+            resume_prefix_args: vec!["--output-format".into(), "plain".into()],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+        assert!(
+            validate_adapter(&a).is_empty(),
+            "{:?}",
+            validate_adapter(&a)
+        );
+    }
+
+    #[test]
+    fn continuity_args_require_a_usable_launch() {
+        let mut a = base_adapter("x");
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["  ".into()],
+            resume_prefix_args: vec![],
+            session_id_flag: None,
+            resume_flag: None,
+        });
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "continuity_args" && e.message.contains("no usable init")));
+    }
+
+    #[test]
+    fn continuity_session_flag_without_capability_is_dead_config() {
+        let mut a = base_adapter("x");
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec![],
+            resume_prefix_args: vec![],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: None,
+        });
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "continuity_args.session_id_flag"
+                && e.message.contains("dead config")));
     }
 
     #[test]
@@ -500,6 +797,151 @@ mod tests {
             "{:?}",
             validate_adapter(&a)
         );
+    }
+
+    #[test]
+    fn blank_prompt_flags_are_rejected() {
+        let mut a = base_adapter("x");
+        a.prompt_flag = Some("".into());
+        a.interactive_prompt_flag = Some("  ".into());
+        let errs = validate_adapter(&a);
+        assert!(errs
+            .iter()
+            .any(|e| e.field == "prompt_flag" && e.message.contains("must not be blank")));
+        assert!(errs.iter().any(
+            |e| e.field == "interactive_prompt_flag" && e.message.contains("must not be blank")
+        ));
+
+        let mut ok = base_adapter("y");
+        ok.prompt_flag = Some("--single".into());
+        ok.interactive_prompt_flag = Some("--single".into());
+        assert!(
+            validate_adapter(&ok).is_empty(),
+            "{:?}",
+            validate_adapter(&ok)
+        );
+    }
+
+    #[test]
+    fn blank_continuity_resume_flag_is_rejected() {
+        let mut a = base_adapter("x");
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["run".into()],
+            resume_prefix_args: vec!["run".into()],
+            session_id_flag: None,
+            resume_flag: Some("  ".into()),
+        });
+        let errs = validate_adapter(&a);
+        assert!(errs.iter().any(|e| {
+            e.field == "continuity_args.resume_flag" && e.message.contains("must not be blank")
+        }));
+
+        let mut ok = base_adapter("y");
+        ok.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["run".into()],
+            resume_prefix_args: vec!["run".into()],
+            session_id_flag: None,
+            resume_flag: Some("--resume".into()),
+        });
+        assert!(
+            validate_adapter(&ok).is_empty(),
+            "{:?}",
+            validate_adapter(&ok)
+        );
+    }
+
+    /// Drift guard for the authoring allowlists: everything the structs
+    /// serialize (grok-shaped and claude-shaped, exercising every block) must
+    /// pass `unknown_manifest_fields`, camelCase alias spellings must pass,
+    /// and a typo at each nesting level must be reported.
+    #[test]
+    fn unknown_field_allowlists_match_serialization() {
+        let mut grok = base_adapter("grok");
+        grok.prompt_flag = Some("--single".into());
+        grok.interactive_prompt_flag = Some("--single".into());
+        grok.system_prompt_flag = Some("--rules".into());
+        grok.model_flag = Some("--model".into());
+        grok.model_arg_template = Some("-c model={model}".into());
+        grok.capabilities.preassigned_session_id = true;
+        grok.sandbox = Some(SandboxMapping::Args {
+            full_args: vec!["--sandbox".into(), "off".into()],
+            read_only_args: vec!["--sandbox".into(), "read-only".into()],
+        });
+        grok.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["run".into()],
+            resume_prefix_args: vec!["run".into()],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+        grok.version = Some("1.0.0".into());
+        grok.homepage = Some("https://example.com".into());
+        grok.description = Some("desc".into());
+
+        let mut claude = base_adapter("claude-like");
+        claude.capabilities.stream = true;
+        claude.capabilities.preassigned_session_id = true;
+        claude.sandbox = Some(SandboxMapping::Flag {
+            flag: "--permission-mode".into(),
+            full: "bypassPermissions".into(),
+            read_only: "plan".into(),
+        });
+        claude.stream_args = Some(StreamArgs {
+            prefix_args: vec!["-p".into()],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+
+        let manifest = AdapterManifest {
+            adapters: vec![grok, claude],
+        };
+        let serialized = serde_json::to_value(&manifest).unwrap();
+        assert_eq!(
+            unknown_manifest_fields(&serialized),
+            Vec::<String>::new(),
+            "serialized structs must satisfy the authoring allowlists"
+        );
+
+        let camel: serde_json::Value = serde_json::from_str(
+            r#"{"adapters":[{
+                "id":"x","label":"X","executable":"x","install_hint":"hint",
+                "promptFlag":"--single","interactivePromptFlag":"--single",
+                "interactivePromptPrefixArgs":[],"nonInteractivePromptPrefixArgs":["run"],
+                "systemPromptFlag":null,"modelFlag":"--model","modelArgTemplate":null,
+                "capabilities":{"preassignedSessionId":true},
+                "sandbox":{"fullArgs":["a"],"readOnlyArgs":["b"]},
+                "streamArgs":{"prefixArgs":["-p"],"sessionIdFlag":"--session-id","resumeFlag":"--resume"},
+                "continuityArgs":{"initPrefixArgs":["run"],"resumePrefixArgs":["run"],"sessionIdFlag":"--s","resumeFlag":"--r"}
+            }]}"#,
+        )
+        .unwrap();
+        assert_eq!(unknown_manifest_fields(&camel), Vec::<String>::new());
+
+        let typos: serde_json::Value = serde_json::from_str(
+            r#"{"adapters":[{
+                "id":"x","label":"X","executable":"x","install_hint":"hint",
+                "capabilties":{"stream":true},
+                "capabilities":{"straem":true},
+                "sandbox":{"flags":"--x"},
+                "stream_args":{"prefix_arg":["-p"],"init_prefix_args":["mis-nested"]},
+                "continuity_args":{"init_prefix":["run"],"prefix_args":["mis-nested"]}
+            }]}"#,
+        )
+        .unwrap();
+        let found = unknown_manifest_fields(&typos);
+        for expected in [
+            "adapters[0].capabilties",
+            "adapters[0].capabilities.straem",
+            "adapters[0].sandbox.flags",
+            "adapters[0].stream_args.prefix_arg",
+            "adapters[0].stream_args.init_prefix_args",
+            "adapters[0].continuity_args.init_prefix",
+            "adapters[0].continuity_args.prefix_args",
+        ] {
+            assert!(
+                found.contains(&expected.to_string()),
+                "{expected} missing from {found:?}"
+            );
+        }
     }
 
     #[test]

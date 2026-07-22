@@ -71,6 +71,47 @@ fn is_false(b: &bool) -> bool {
     !*b
 }
 
+/// Report content inside a raw registry-index JSON document that this spec
+/// version does not recognize: unknown keys at the index, entry, and adapter
+/// levels. `conjure` — the
+/// authoring and mutation surface — refuses an index with any hits, because
+/// its load-rewrite flows (e.g. `registry yank`) would silently drop that
+/// content; the tolerant [`RegistryIndex::from_json`] parse is for read-only
+/// consumers.
+pub fn unknown_index_fields(raw: &serde_json::Value) -> Vec<String> {
+    const INDEX_FIELDS: &[&str] = &["format", "runtimes"];
+    const ENTRY_FIELDS: &[&str] = &["version", "adapter", "sha256", "published_at", "yanked"];
+
+    fn sweep(value: &serde_json::Value, allowed: &[&str], path: &str, out: &mut Vec<String>) {
+        let Some(object) = value.as_object() else {
+            return;
+        };
+        for key in object.keys() {
+            if !allowed.contains(&key.as_str()) {
+                out.push(format!("{path}.{key}"));
+            }
+        }
+    }
+
+    let mut out = Vec::new();
+    sweep(raw, INDEX_FIELDS, "index", &mut out);
+    let runtimes = raw.get("runtimes").and_then(serde_json::Value::as_object);
+    for (runtime_id, entries) in runtimes.into_iter().flatten() {
+        let entries = entries.as_array().map(Vec::as_slice).unwrap_or_default();
+        for (position, entry) in entries.iter().enumerate() {
+            let base = format!("runtimes.{runtime_id}[{position}]");
+            sweep(entry, ENTRY_FIELDS, &base, &mut out);
+            if let Some(adapter) = entry.get("adapter") {
+                out.extend(coven_runtime_spec::unknown_adapter_fields(
+                    adapter,
+                    &format!("{base}.adapter"),
+                ));
+            }
+        }
+    }
+    out
+}
+
 /// Why a resolution failed.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ResolveError {
@@ -254,10 +295,101 @@ mod tests {
             capabilities: Capabilities::BASELINE,
             sandbox: None,
             stream_args: None,
+            prompt_flag: None,
+            interactive_prompt_flag: None,
+            continuity_args: None,
             version: None,
             homepage: None,
             description: None,
         }
+    }
+
+    /// The strict raw checker must accept everything this version's structs
+    /// serialize, and flag typos, newer-spec fields, and newer protocol
+    /// values at every level.
+    #[test]
+    fn unknown_index_fields_matches_serialization_and_flags_newer_content() {
+        let index = RegistryIndex {
+            format: INDEX_FORMAT.into(),
+            runtimes: BTreeMap::from([(
+                "hermes".to_string(),
+                vec![entry("hermes", "1.0.0", false)],
+            )]),
+        };
+        let serialized = serde_json::to_value(&index).unwrap();
+        assert_eq!(unknown_index_fields(&serialized), Vec::<String>::new());
+
+        let newer: serde_json::Value = serde_json::from_str(
+            r#"{
+              "format": "1",
+              "distribution": "mirror",
+              "runtimes": {
+                "hermes": [{
+                  "version": "1.0.0",
+                  "signature": "sig",
+                  "adapter": {
+                    "id": "hermes", "label": "Hermes", "executable": "hermes",
+                    "install_hint": "install",
+                    "capabilties": { "stream": true },
+                    "event_protocol": "hyperspace-jsonl-v3"
+                  }
+                }]
+              }
+            }"#,
+        )
+        .unwrap();
+        let found = unknown_index_fields(&newer);
+        for expected in [
+            "index.distribution",
+            "runtimes.hermes[0].signature",
+            "runtimes.hermes[0].adapter.capabilties",
+        ] {
+            assert!(
+                found.iter().any(|f| f == expected),
+                "{expected} missing from {found:?}"
+            );
+        }
+        assert!(
+            found
+                .iter()
+                .any(|f| f == "runtimes.hermes[0].adapter.event_protocol"),
+            "unknown adapter field missing from {found:?}"
+        );
+    }
+
+    /// Forward compatibility: an index written by a NEWER spec (unknown
+    /// adapter fields) must parse on this version and keep every runtime
+    /// resolvable — one exotic entry must never poison the whole index.
+    #[test]
+    fn index_from_a_newer_spec_version_stays_resolvable() {
+        let raw = r#"{
+          "format": "1",
+          "runtimes": {
+            "hermes": [{
+              "version": "1.0.0",
+              "adapter": {
+                "id": "hermes", "label": "Hermes", "executable": "hermes",
+                "non_interactive_prompt_prefix_args": ["chat"],
+                "install_hint": "install hermes"
+              }
+            }],
+            "futuristic": [{
+              "version": "2.0.0",
+              "adapter": {
+                "id": "futuristic", "label": "Futuristic", "executable": "futuristic",
+                "non_interactive_prompt_prefix_args": ["go"],
+                "install_hint": "install futuristic",
+                "event_protocol": "hyperspace-jsonl-v3",
+                "teleportation_args": { "warp": 9 }
+              }
+            }]
+          }
+        }"#;
+        let index = RegistryIndex::from_json(raw).expect("newer-spec index parses");
+        assert_eq!(index.runtime_ids(), ["futuristic", "hermes"]);
+        assert!(index.resolve_latest("hermes").is_ok());
+        let futuristic = index.resolve_latest("futuristic").expect("resolvable");
+        assert_eq!(futuristic.adapter.id, "futuristic");
     }
 
     fn entry(id: &str, version: &str, yanked: bool) -> RegistryEntry {

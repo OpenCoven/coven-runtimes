@@ -139,6 +139,74 @@
         "published_at": "2026-07-12T17:10:36Z"
       }
     ],
+    "grok": [
+      {
+        "version": "1.0.0",
+        "adapter": {
+          "id": "grok",
+          "label": "Grok Build",
+          "executable": "grok",
+          "interactive_prompt_prefix_args": [
+            "--no-auto-update",
+            "--no-alt-screen",
+            "--output-format",
+            "plain"
+          ],
+          "non_interactive_prompt_prefix_args": [
+            "--no-auto-update",
+            "--no-alt-screen",
+            "--output-format",
+            "plain"
+          ],
+          "prompt_flag": "--single",
+          "interactive_prompt_flag": "--single",
+          "install_hint": "Install Grok Build by following xAI's official instructions at https://docs.x.ai/build/overview. Make sure `grok` is on PATH and run `grok login` (or set XAI_API_KEY for headless auth), then retry `coven adapter doctor grok`.",
+          "system_prompt_flag": "--rules",
+          "model_flag": "--model",
+          "capabilities": {
+            "stream": false,
+            "preassigned_session_id": true,
+            "think": false,
+            "speed": false
+          },
+          "sandbox": {
+            "full_args": [
+              "--permission-mode",
+              "bypassPermissions",
+              "--sandbox",
+              "off"
+            ],
+            "read_only_args": [
+              "--permission-mode",
+              "default",
+              "--sandbox",
+              "read-only"
+            ]
+          },
+          "continuity_args": {
+            "init_prefix_args": [
+              "--no-auto-update",
+              "--no-alt-screen",
+              "--output-format",
+              "plain"
+            ],
+            "resume_prefix_args": [
+              "--no-auto-update",
+              "--no-alt-screen",
+              "--output-format",
+              "plain"
+            ],
+            "session_id_flag": "--session-id",
+            "resume_flag": "--resume"
+          },
+          "version": "1.0.0",
+          "homepage": "https://docs.x.ai/build/cli/headless-scripting",
+          "description": "xAI Grok Build adapter. Finite one-shot headless runs via `--single=<prompt>` in Grok's plain output mode (`--output-format plain`, its own default): stdout carries only the final response text, reasoning is dropped at the source, and errors go to stderr — no event protocol or translation layer. Session pre-assignment via `--session-id`, cold-start resume via `--resume`. Permission mapping uses the argv-list sandbox form to drive both `--permission-mode` and `--sandbox`. No stream mode: every turn is a fresh process."
+        },
+        "sha256": "411d9d970bca7257e17481ba5ae04ef714fd85d031b6e2ee1c4bf843d1f6eb76",
+        "published_at": "2026-07-18T15:41:26Z"
+      }
+    ],
     "hermes": [
       {
         "version": "1.0.0",

@@ -34,6 +34,8 @@ parse; canonical output is snake_case.
 |-----------------|------|-------|
 | `interactive_prompt_prefix_args` (`interactivePromptPrefixArgs`) | string[] | argv prefix for interactive launch; prompt appended last. |
 | `non_interactive_prompt_prefix_args` (`nonInteractivePromptPrefixArgs`) | string[] | argv prefix for one-shot launch; prompt appended last. |
+| `prompt_flag` (`promptFlag`) | string \| null | Binds the one-shot prompt as `--flag=<prompt>` for runtimes with no positional prompt slot (Copilot `--prompt`, Grok Build `--single`). `null` ⇒ prompt is the final positional. **Non-blank when present.** |
+| `interactive_prompt_flag` (`interactivePromptFlag`) | string \| null | Binds the prompt for an interactive-with-prompt launch (Copilot `--interactive`). **Non-blank when present.** |
 | `system_prompt_flag` (`systemPromptFlag`) | string \| null | Flag that injects a system prompt (e.g. `--append-system-prompt`). `null` ⇒ identity is prepended to the prompt instead. |
 
 ### Model selection
@@ -54,7 +56,7 @@ baseline of a plain one-shot CLI). These replace coven's hardcoded
 | Field (aliases) | Mirrors coven predicate | Requires |
 |-----------------|-------------------------|----------|
 | `stream` | `harness_supports_stream_mode` | `stream_args` (non-empty `prefix_args`) |
-| `preassigned_session_id` (`preassignedSessionId`) | `harness_supports_preassigned_session_id` | `stream_args.session_id_flag` |
+| `preassigned_session_id` (`preassignedSessionId`) | `harness_supports_preassigned_session_id` | `stream_args.session_id_flag` when `stream`, else `continuity_args.session_id_flag` |
 | `think` | `harness_supports_think` | — |
 | `speed` | `harness_supports_speed` | — |
 
@@ -102,9 +104,54 @@ surface is boolean or repeatable flags (GitHub Copilot CLI):
 Providing `stream_args` **without** `capabilities.stream` is flagged as dead
 config.
 
+### Continuity args
+
+`continuity_args` (`continuityArgs`) object (optional). One-shot
+non-interactive session continuity: how a cold-started turn initializes a
+named conversation or resumes an existing one via the runtime CLI's own
+session mechanism. Mirrors `stream_args` for runtimes without a long-lived
+stream mode (GitHub Copilot CLI, Grok Build).
+
+| Field (aliases) | Type | Notes |
+|-----------------|------|-------|
+| `init_prefix_args` (`initPrefixArgs`) | string[] | argv prepended when initializing a fresh named conversation. |
+| `resume_prefix_args` (`resumePrefixArgs`) | string[] | argv prepended when resuming; runtimes with a positional resume id put it here. |
+| `session_id_flag` (`sessionIdFlag`) | string \| null | Pre-assigns the session id on a fresh launch. Requires `capabilities.preassigned_session_id` (dead config otherwise). |
+| `resume_flag` (`resumeFlag`) | string \| null | Resumes an existing session (e.g. `--resume`). |
+
+`continuity_args` must declare a **usable init or resume launch**: a non-blank
+`session_id_flag`/`resume_flag` or at least one non-blank prefix token.
+
 ### Registry metadata (optional; ignored by coven core)
 
 `version` (semver), `homepage` (URL), `description` (one line).
+
+## Unknown fields & forward compatibility
+
+Two layers with different strictness:
+
+- **Parsing is tolerant.** `coven-runtime-spec` ignores fields it does not
+  recognize. A registry index written by a newer spec version therefore
+  still loads on older consumers, degrading only the affected adapter instead
+  of failing the whole document. (Spec versions ≤ 0.1.3 predate this rule and
+  reject any index containing newer fields — see
+  [`adoption.md`](adoption.md).)
+- **Authoring is strict.** `conjure` rejects any field no spec version
+  recognizes (`unknown_manifest_fields`), and the JSON Schema declares
+  `additionalProperties: false`, so typos fail before a manifest reaches the
+  registry.
+
+`conjure` applies the strict layer to **registry indexes too** (`validate
+--registry`, `registry build`, `registry yank`): those flows load and rewrite
+the whole index, so content from a newer spec refuses to load rather than
+being silently dropped or rewritten. Upgrade `conjure` before mutating an
+index produced by a newer spec. The read-only `registry list` uses the
+tolerant layer instead — one newer entry must not make every runtime
+unlistable.
+
+The `sandbox` object keeps strict field matching in both layers: its two
+structural forms are distinguished by their field sets, so evolving the
+sandbox shape is a spec-version event, not a silently-ignorable addition.
 
 ## Validation rules (summary)
 
@@ -119,8 +166,13 @@ config.
    form) or ≥1 non-empty token in each of `full_args` / `read_only_args`
    (args form).
 7. `capabilities.stream` ⇒ `stream_args` with non-empty `prefix_args`.
-8. `capabilities.preassigned_session_id` ⇒ `stream_args.session_id_flag`.
+8. `capabilities.preassigned_session_id` ⇒ the session id flag on the active
+   launch path: `stream_args.session_id_flag` for streaming adapters,
+   `continuity_args.session_id_flag` otherwise.
 9. `stream_args` present ⇒ `capabilities.stream` true (no dead config).
+10. `continuity_args` present ⇒ a usable init or resume launch; its
+    `session_id_flag` requires `capabilities.preassigned_session_id`
+    (no dead config).
 
 ## Conformance probe (`conjure test`)
 

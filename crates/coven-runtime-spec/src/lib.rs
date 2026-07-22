@@ -31,11 +31,11 @@ pub mod sandbox;
 pub mod validate;
 
 pub use capabilities::Capabilities;
-pub use manifest::{AdapterManifest, RuntimeAdapter, StreamArgs};
+pub use manifest::{AdapterManifest, ContinuityArgs, RuntimeAdapter, StreamArgs};
 pub use sandbox::{Permission, SandboxMapping};
 pub use validate::{
-    parse_registry_version, valid_registry_version, validate_adapter, validate_manifest,
-    ValidationError, BUILT_IN_IDS,
+    parse_registry_version, unknown_adapter_fields, unknown_manifest_fields,
+    valid_registry_version, validate_adapter, validate_manifest, ValidationError, BUILT_IN_IDS,
 };
 
 /// The manifest schema version this crate implements. Bumped on

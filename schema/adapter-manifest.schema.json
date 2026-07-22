@@ -43,6 +43,20 @@
           "type": "array", "items": { "type": "string" }
         },
         "install_hint": { "type": "string", "minLength": 1 },
+        "prompt_flag": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "Flag that binds the one-shot prompt as `--flag=<prompt>` for runtimes with no positional prompt slot (e.g. `--single`). null/absent ⇒ prompt is the final positional argument. Must be non-blank when present."
+        },
+        "promptFlag": { "type": ["string", "null"], "minLength": 1, "pattern": "\\S" },
+        "interactive_prompt_flag": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "Flag that binds the prompt for an interactive-with-prompt launch (e.g. `--interactive`). Must be non-blank when present."
+        },
+        "interactivePromptFlag": { "type": ["string", "null"], "minLength": 1, "pattern": "\\S" },
         "system_prompt_flag": { "type": ["string", "null"] },
         "systemPromptFlag": { "type": ["string", "null"] },
         "model_flag": { "type": ["string", "null"] },
@@ -56,6 +70,8 @@
         "sandbox": { "$ref": "#/definitions/sandbox" },
         "stream_args": { "$ref": "#/definitions/streamArgs" },
         "streamArgs": { "$ref": "#/definitions/streamArgs" },
+        "continuity_args": { "$ref": "#/definitions/continuityArgs" },
+        "continuityArgs": { "$ref": "#/definitions/continuityArgs" },
         "version": { "type": "string" },
         "homepage": { "type": "string" },
         "description": { "type": "string" }
@@ -126,6 +142,22 @@
         "sessionIdFlag": { "type": ["string", "null"] },
         "resume_flag": { "type": ["string", "null"] },
         "resumeFlag": { "type": ["string", "null"] }
+      }
+    },
+    "continuityArgs": {
+      "type": "object",
+      "required": [],
+      "additionalProperties": false,
+      "description": "One-shot non-interactive session continuity: how a cold-started turn initializes a named conversation (`session_id_flag`) or resumes one (`resume_flag`/`resume_prefix_args`). Mirrors streamArgs for runtimes without a long-lived stream mode. Must declare a usable init or resume launch.",
+      "properties": {
+        "init_prefix_args": { "type": "array", "items": { "type": "string" } },
+        "initPrefixArgs": { "type": "array", "items": { "type": "string" } },
+        "resume_prefix_args": { "type": "array", "items": { "type": "string" } },
+        "resumePrefixArgs": { "type": "array", "items": { "type": "string" } },
+        "session_id_flag": { "type": ["string", "null"] },
+        "sessionIdFlag": { "type": ["string", "null"] },
+        "resume_flag": { "type": ["string", "null"], "minLength": 1, "pattern": "\\S" },
+        "resumeFlag": { "type": ["string", "null"], "minLength": 1, "pattern": "\\S" }
       }
     }
   }

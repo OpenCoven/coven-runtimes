@@ -106,8 +106,92 @@ fn registry_index_without_flag_fails_loudly() {
     let out = conjure().arg("validate").arg(&path).output().unwrap();
     assert!(!out.status.success());
     let stderr = String::from_utf8_lossy(&out.stderr);
-    assert!(stderr.contains("failed to parse manifest"), "{stderr}");
-    assert!(stderr.contains("unknown field `format`"), "{stderr}");
+    assert!(stderr.contains("looks like a registry index"), "{stderr}");
+    assert!(stderr.contains("--registry"), "{stderr}");
+}
+
+#[test]
+fn registry_with_typoed_entry_field_is_rejected() {
+    // Tolerant crate-level parsing must not let `validate --registry` bless a
+    // typo: the strict raw check refuses unrecognized index content.
+    let dir = tempdir().unwrap();
+    let path = write(
+        dir.path(),
+        "index.json",
+        r#"{
+          "format": "1",
+          "runtimes": {
+            "hermes": [{
+              "version": "1.0.0",
+              "adapter": {
+                "id": "hermes", "label": "Hermes", "executable": "hermes",
+                "install_hint": "install",
+                "capabilties": { "stream": true }
+              }
+            }]
+          }
+        }"#,
+    );
+    let out = conjure()
+        .arg("validate")
+        .arg("--registry")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("does not recognize"), "{stderr}");
+    assert!(stderr.contains("capabilties"), "{stderr}");
+}
+
+#[test]
+fn registry_list_stays_tolerant_of_newer_spec_content() {
+    // Read-only listing must keep working on an index written by a newer
+    // spec: one unfamiliar entry must not make every runtime unlistable.
+    // (Mutating flows like yank stay strict — covered above.)
+    let dir = tempdir().unwrap();
+    let path = write(
+        dir.path(),
+        "index.json",
+        r#"{
+          "format": "1",
+          "runtimes": {
+            "futuristic": [{
+              "version": "2.0.0",
+              "adapter": {
+                "id": "futuristic", "label": "Futuristic", "executable": "futuristic",
+                "non_interactive_prompt_prefix_args": ["go"],
+                "install_hint": "install futuristic",
+                "event_protocol": "hyperspace-jsonl-v3",
+                "teleportation_args": { "warp": 9 }
+              }
+            }],
+            "hermes": [{
+              "version": "1.0.0",
+              "adapter": {
+                "id": "hermes", "label": "Hermes", "executable": "hermes",
+                "non_interactive_prompt_prefix_args": ["chat"],
+                "install_hint": "install hermes"
+              }
+            }]
+          }
+        }"#,
+    );
+    let out = conjure()
+        .arg("registry")
+        .arg("list")
+        .arg("--index")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("hermes"), "{stdout}");
+    assert!(stdout.contains("futuristic"), "{stdout}");
 }
 
 #[test]

@@ -18,8 +18,13 @@ use crate::sandbox::SandboxMapping;
 
 /// A manifest file: a registry of one or more adapters. Matches coven's
 /// `{ "adapters": [ ... ] }` envelope.
+///
+/// Parsing is **tolerant of unknown fields** so an index or manifest written
+/// by a newer spec version still loads on older consumers (forward
+/// compatibility). Authoring-time typo detection lives in
+/// [`crate::validate::unknown_manifest_fields`] and the JSON Schema, which
+/// `conjure` enforces.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct AdapterManifest {
     #[serde(default)]
     pub adapters: Vec<RuntimeAdapter>,
@@ -44,7 +49,6 @@ impl AdapterManifest {
 /// Field naming follows the manifest convention: snake_case is canonical (so
 /// coven's existing snake_case adapters parse unchanged) with camelCase aliases.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
 pub struct StreamArgs {
     /// argv tokens that put the runtime into persistent stream-json mode.
     #[serde(alias = "prefixArgs")]
@@ -63,12 +67,77 @@ pub struct StreamArgs {
     pub resume_flag: Option<String>,
 }
 
+/// Args for one-shot non-interactive session continuity: how a cold-started
+/// turn initializes a named conversation or resumes an existing one via the
+/// runtime CLI's own session mechanism (e.g. `--session-id` / `--resume`).
+/// Mirrors `stream_args` for runtimes without a long-lived stream mode.
+///
+/// Field naming follows the manifest convention: snake_case is canonical with
+/// camelCase aliases, matching coven's `ContinuityArgs`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ContinuityArgs {
+    /// argv tokens prepended when initializing a fresh named conversation.
+    #[serde(default, alias = "initPrefixArgs")]
+    pub init_prefix_args: Vec<String>,
+    /// argv tokens prepended when resuming an existing conversation.
+    #[serde(default, alias = "resumePrefixArgs")]
+    pub resume_prefix_args: Vec<String>,
+    /// Flag that pre-assigns the session id on a fresh launch
+    /// (e.g. `--session-id`). Requires [`Capabilities::preassigned_session_id`].
+    #[serde(
+        default,
+        alias = "sessionIdFlag",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub session_id_flag: Option<String>,
+    /// Flag that resumes an existing session (e.g. `--resume`). Omitted for
+    /// runtimes whose resume id rides `resume_prefix_args` as a positional.
+    #[serde(default, alias = "resumeFlag", skip_serializing_if = "Option::is_none")]
+    pub resume_flag: Option<String>,
+}
+
+impl ContinuityArgs {
+    /// The session-id flag, trimmed; `None` when absent or blank.
+    pub fn session_id_flag(&self) -> Option<&str> {
+        self.session_id_flag
+            .as_deref()
+            .map(str::trim)
+            .filter(|flag| !flag.is_empty())
+    }
+
+    /// The resume flag, trimmed; `None` when absent or blank.
+    pub fn resume_flag(&self) -> Option<&str> {
+        self.resume_flag
+            .as_deref()
+            .map(str::trim)
+            .filter(|flag| !flag.is_empty())
+    }
+
+    /// Whether these args can launch a fresh named conversation.
+    pub fn has_init_launch(&self) -> bool {
+        self.session_id_flag().is_some()
+            || self
+                .init_prefix_args
+                .iter()
+                .any(|arg| !arg.trim().is_empty())
+    }
+
+    /// Whether these args can resume an existing conversation.
+    pub fn has_resume_launch(&self) -> bool {
+        self.resume_flag().is_some()
+            || self
+                .resume_prefix_args
+                .iter()
+                .any(|arg| !arg.trim().is_empty())
+    }
+}
+
 /// A single runtime adapter definition.
 ///
 /// Field names and `camelCase` aliases match coven's `ExternalHarnessAdapterSpec`
 /// so this is a drop-in superset.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case", deny_unknown_fields)]
+#[serde(rename_all = "snake_case")]
 pub struct RuntimeAdapter {
     /// Canonical id: lowercase letters, digits, `.`, `_`, `-`.
     pub id: String,
@@ -83,6 +152,21 @@ pub struct RuntimeAdapter {
     /// argv prefix for a one-shot non-interactive launch (prompt appended last).
     #[serde(default, alias = "nonInteractivePromptPrefixArgs")]
     pub non_interactive_prompt_prefix_args: Vec<String>,
+
+    /// Flag that binds the one-shot prompt as `--flag=<prompt>` for runtimes
+    /// with no positional prompt slot (e.g. Copilot's `--prompt`, Grok Build's
+    /// `--single`). `None` means the prompt is the final positional argument.
+    #[serde(default, alias = "promptFlag", skip_serializing_if = "Option::is_none")]
+    pub prompt_flag: Option<String>,
+    /// Flag that binds the prompt for an interactive-with-prompt launch
+    /// (e.g. Copilot's `--interactive`). Falls back to `prompt_flag` semantics
+    /// when absent.
+    #[serde(
+        default,
+        alias = "interactivePromptFlag",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub interactive_prompt_flag: Option<String>,
 
     /// Recovery / install guidance surfaced by `coven doctor`.
     pub install_hint: String,
@@ -119,6 +203,15 @@ pub struct RuntimeAdapter {
     /// Stream-json launch args. Required when `capabilities.stream` is true.
     #[serde(default, alias = "streamArgs", skip_serializing_if = "Option::is_none")]
     pub stream_args: Option<StreamArgs>,
+    /// One-shot non-interactive session-continuity args (init/resume a named
+    /// conversation on a cold start). Mirrors `stream_args` for runtimes
+    /// without a long-lived stream mode.
+    #[serde(
+        default,
+        alias = "continuityArgs",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub continuity_args: Option<ContinuityArgs>,
 
     // ── Registry metadata (optional; ignored by coven core) ──────────────────
     /// Semver of this adapter definition, for the registry index.
@@ -180,6 +273,9 @@ mod tests {
         assert!(hermes.capabilities.is_baseline());
         assert!(hermes.sandbox.is_none());
         assert!(hermes.stream_args.is_none());
+        assert!(hermes.prompt_flag.is_none());
+        assert!(hermes.interactive_prompt_flag.is_none());
+        assert!(hermes.continuity_args.is_none());
         assert!(!hermes.supports_model());
         assert!(!hermes.supports_permission());
     }
@@ -206,18 +302,25 @@ mod tests {
         );
     }
 
+    /// Forward compatibility: a manifest written by a NEWER spec version (with
+    /// fields this version has never heard of) must still parse rather than
+    /// failing the document. Typo strictness is the authoring layer's job
+    /// (`unknown_manifest_fields` + the JSON Schema via `conjure validate`).
     #[test]
-    fn rejects_unknown_manifest_fields() {
+    fn tolerates_fields_from_newer_spec_versions() {
         let raw = r#"{
           "adapters": [{
             "id": "x", "label": "X", "executable": "x",
             "install_hint": "hint",
-            "capabilties": { "stream": true }
+            "future_field": { "from": "v9" },
+            "event_protocol": "from-a-newer-spec",
+            "capabilities": { "stream": false, "future_capability": true }
           }]
         }"#;
-        let err = AdapterManifest::from_json(raw).unwrap_err().to_string();
-        assert!(err.contains("unknown field"), "{err}");
-        assert!(err.contains("capabilties"), "{err}");
+        let manifest = AdapterManifest::from_json(raw).expect("newer-spec manifest parses");
+        let adapter = &manifest.adapters[0];
+        assert_eq!(adapter.id, "x");
+        assert!(!adapter.capabilities.stream);
     }
 
     /// A Copilot-shaped adapter — args-form sandbox, JSONL streaming — parses,
@@ -259,6 +362,92 @@ mod tests {
 
         let reparsed = AdapterManifest::from_json(&m.to_json_pretty().unwrap()).unwrap();
         assert_eq!(m, reparsed);
+    }
+
+    /// A Grok-Build-shaped adapter — flag-bound prompt, plain one-shot output,
+    /// cold-start continuity instead of stream mode — parses, exposes the right
+    /// surface, and round-trips losslessly.
+    #[test]
+    fn grok_shaped_adapter_round_trips() {
+        let raw = r#"{
+          "adapters": [{
+            "id": "grok", "label": "Grok Build", "executable": "grok",
+            "interactive_prompt_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "plain"],
+            "non_interactive_prompt_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "plain"],
+            "install_hint": "Install Grok Build and run `grok login`.",
+            "system_prompt_flag": "--rules",
+            "prompt_flag": "--single",
+            "interactive_prompt_flag": "--single",
+            "model_flag": "--model",
+            "capabilities": { "stream": false, "preassigned_session_id": true },
+            "sandbox": { "full_args": ["--permission-mode", "bypassPermissions", "--sandbox", "off"], "read_only_args": ["--permission-mode", "default", "--sandbox", "read-only"] },
+            "continuity_args": {
+              "init_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "plain"],
+              "resume_prefix_args": ["--no-auto-update", "--no-alt-screen", "--output-format", "plain"],
+              "session_id_flag": "--session-id",
+              "resume_flag": "--resume"
+            },
+            "version": "1.0.0"
+          }]
+        }"#;
+        let m = AdapterManifest::from_json(raw).unwrap();
+        let a = &m.adapters[0];
+        assert_eq!(a.prompt_flag.as_deref(), Some("--single"));
+        assert_eq!(a.interactive_prompt_flag.as_deref(), Some("--single"));
+        assert!(!a.capabilities.stream);
+        assert!(a.capabilities.preassigned_session_id);
+        let continuity = a.continuity_args.as_ref().unwrap();
+        assert_eq!(continuity.session_id_flag(), Some("--session-id"));
+        assert_eq!(continuity.resume_flag(), Some("--resume"));
+        assert!(continuity.has_init_launch());
+        assert!(continuity.has_resume_launch());
+
+        let reparsed = AdapterManifest::from_json(&m.to_json_pretty().unwrap()).unwrap();
+        assert_eq!(m, reparsed);
+    }
+
+    #[test]
+    fn accepts_camel_case_aliases_for_continuity() {
+        let raw = r#"{
+          "adapters": [{
+            "id": "x", "label": "X", "executable": "x",
+            "install_hint": "hint",
+            "promptFlag": "--single",
+            "interactivePromptFlag": "--single",
+            "capabilities": { "preassignedSessionId": true },
+            "continuityArgs": { "initPrefixArgs": ["run"], "sessionIdFlag": "--session-id", "resumeFlag": "--resume" }
+          }]
+        }"#;
+        let m = AdapterManifest::from_json(raw).unwrap();
+        let a = &m.adapters[0];
+        assert_eq!(a.prompt_flag.as_deref(), Some("--single"));
+        assert_eq!(a.interactive_prompt_flag.as_deref(), Some("--single"));
+        let continuity = a.continuity_args.as_ref().unwrap();
+        assert_eq!(continuity.init_prefix_args, vec!["run"]);
+        assert_eq!(continuity.session_id_flag(), Some("--session-id"));
+        assert_eq!(continuity.resume_flag(), Some("--resume"));
+    }
+
+    #[test]
+    fn continuity_launch_predicates_ignore_blank_tokens() {
+        let blank = ContinuityArgs {
+            init_prefix_args: vec!["  ".into()],
+            resume_prefix_args: vec![],
+            session_id_flag: Some("  ".into()),
+            resume_flag: None,
+        };
+        assert!(blank.session_id_flag().is_none());
+        assert!(!blank.has_init_launch());
+        assert!(!blank.has_resume_launch());
+
+        let resume_positional = ContinuityArgs {
+            init_prefix_args: vec![],
+            resume_prefix_args: vec!["exec".into(), "resume".into()],
+            session_id_flag: None,
+            resume_flag: None,
+        };
+        assert!(!resume_positional.has_init_launch());
+        assert!(resume_positional.has_resume_launch());
     }
 
     #[test]
