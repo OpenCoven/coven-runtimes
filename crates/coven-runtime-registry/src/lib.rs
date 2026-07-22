@@ -14,7 +14,7 @@
 //! fetch, or a bundled copy) and query it. Fetching/transport lives in the
 //! caller.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use coven_runtime_spec::{
     parse_registry_version, validate_adapter, RuntimeAdapter, ValidationError,
@@ -164,7 +164,7 @@ impl RegistryIndex {
     pub fn validate(&self) -> Vec<ValidationError> {
         let mut errors = Vec::new();
         for (runtime_id, entries) in &self.runtimes {
-            let mut seen_versions: Vec<&str> = Vec::new();
+            let mut seen_versions: BTreeSet<&str> = BTreeSet::new();
             for entry in entries {
                 if &entry.adapter.id != runtime_id {
                     errors.push(ValidationError {
@@ -183,7 +183,7 @@ impl RegistryIndex {
                         ),
                     });
                 }
-                if seen_versions.contains(&entry.version.as_str()) {
+                if !seen_versions.insert(&entry.version) {
                     errors.push(ValidationError {
                         adapter_id: Some(runtime_id.clone()),
                         field: "version",
@@ -192,8 +192,6 @@ impl RegistryIndex {
                             entry.version
                         ),
                     });
-                } else {
-                    seen_versions.push(&entry.version);
                 }
                 if let Some(declared) = &entry.adapter.version {
                     if declared != &entry.version {
