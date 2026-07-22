@@ -46,15 +46,17 @@
         "prompt_flag": {
           "type": ["string", "null"],
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Flag that binds the one-shot prompt as `--flag=<prompt>` for runtimes with no positional prompt slot (e.g. `--single`). null/absent ⇒ prompt is the final positional argument. Must be non-blank when present."
         },
-        "promptFlag": { "type": ["string", "null"], "minLength": 1 },
+        "promptFlag": { "type": ["string", "null"], "minLength": 1, "pattern": "\\S" },
         "interactive_prompt_flag": {
           "type": ["string", "null"],
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Flag that binds the prompt for an interactive-with-prompt launch (e.g. `--interactive`). Must be non-blank when present."
         },
-        "interactivePromptFlag": { "type": ["string", "null"], "minLength": 1 },
+        "interactivePromptFlag": { "type": ["string", "null"], "minLength": 1, "pattern": "\\S" },
         "system_prompt_flag": { "type": ["string", "null"] },
         "systemPromptFlag": { "type": ["string", "null"] },
         "model_flag": { "type": ["string", "null"] },
@@ -154,8 +156,8 @@
         "resumePrefixArgs": { "type": "array", "items": { "type": "string" } },
         "session_id_flag": { "type": ["string", "null"] },
         "sessionIdFlag": { "type": ["string", "null"] },
-        "resume_flag": { "type": ["string", "null"] },
-        "resumeFlag": { "type": ["string", "null"] }
+        "resume_flag": { "type": ["string", "null"], "minLength": 1, "pattern": "\\S" },
+        "resumeFlag": { "type": ["string", "null"], "minLength": 1, "pattern": "\\S" }
       }
     }
   }

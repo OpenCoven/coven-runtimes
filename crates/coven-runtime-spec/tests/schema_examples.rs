@@ -92,6 +92,43 @@ fn schema_rejects_bad_id() {
     );
 }
 
+#[test]
+fn schema_rejects_blank_prompt_and_continuity_resume_flags() {
+    let validator = manifest_schema();
+
+    for field in [
+        "prompt_flag",
+        "promptFlag",
+        "interactive_prompt_flag",
+        "interactivePromptFlag",
+    ] {
+        let mut adapter = serde_json::json!({
+            "id": "x", "label": "X", "executable": "x", "install_hint": "install"
+        });
+        adapter[field] = Value::String("   ".into());
+        let manifest = serde_json::json!({ "adapters": [adapter] });
+        assert!(
+            validator.iter_errors(&manifest).next().is_some(),
+            "schema should reject whitespace-only `{field}`"
+        );
+    }
+
+    for field in ["resume_flag", "resumeFlag"] {
+        let mut continuity = serde_json::json!({ "init_prefix_args": ["run"] });
+        continuity[field] = Value::String("   ".into());
+        let manifest = serde_json::json!({
+            "adapters": [{
+                "id": "x", "label": "X", "executable": "x", "install_hint": "install",
+                "continuity_args": continuity
+            }]
+        });
+        assert!(
+            validator.iter_errors(&manifest).next().is_some(),
+            "schema should reject whitespace-only continuity `{field}`"
+        );
+    }
+}
+
 /// The most important direction: anything the Rust type produces must satisfy
 /// the schema. A fully-populated streaming adapter exercises every added block.
 #[test]

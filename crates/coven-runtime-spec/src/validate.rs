@@ -255,6 +255,17 @@ fn validate_capabilities(adapter: &RuntimeAdapter, id: &str, errors: &mut Vec<Va
     }
 
     if let Some(continuity) = &adapter.continuity_args {
+        if continuity
+            .resume_flag
+            .as_deref()
+            .is_some_and(|flag| flag.trim().is_empty())
+        {
+            errors.push(err(
+                tag(),
+                "continuity_args.resume_flag",
+                "`continuity_args.resume_flag` must not be blank; omit it for a positional resume id",
+            ));
+        }
         if !continuity.has_init_launch() && !continuity.has_resume_launch() {
             errors.push(err(
                 tag(),
@@ -763,6 +774,34 @@ mod tests {
         let mut ok = base_adapter("y");
         ok.prompt_flag = Some("--single".into());
         ok.interactive_prompt_flag = Some("--single".into());
+        assert!(
+            validate_adapter(&ok).is_empty(),
+            "{:?}",
+            validate_adapter(&ok)
+        );
+    }
+
+    #[test]
+    fn blank_continuity_resume_flag_is_rejected() {
+        let mut a = base_adapter("x");
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["run".into()],
+            resume_prefix_args: vec!["run".into()],
+            session_id_flag: None,
+            resume_flag: Some("  ".into()),
+        });
+        let errs = validate_adapter(&a);
+        assert!(errs.iter().any(|e| {
+            e.field == "continuity_args.resume_flag" && e.message.contains("must not be blank")
+        }));
+
+        let mut ok = base_adapter("y");
+        ok.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: vec!["run".into()],
+            resume_prefix_args: vec!["run".into()],
+            session_id_flag: None,
+            resume_flag: Some("--resume".into()),
+        });
         assert!(
             validate_adapter(&ok).is_empty(),
             "{:?}",

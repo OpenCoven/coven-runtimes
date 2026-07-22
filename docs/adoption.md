@@ -108,7 +108,7 @@ parse.
 Consumers that fetch the **live** `canonical/index.json` (release asset, raw
 file, or the downstream-sync dispatch below) must mind spec versions:
 
-- Spec releases **from v0.1.4 onward** (v0.1.4 is the first release cut
+- Spec releases **from v0.2.0 onward** (v0.2.0 is the first release cut
   after tolerant parsing landed; a git dependency on current `main` behaves
   the same) parse indexes containing fields from any newer spec: unknown
   fields are ignored, so the rest of the index stays resolvable.
@@ -116,7 +116,7 @@ file, or the downstream-sync dispatch below) must mind spec versions:
   rule) reject any index containing fields they do not know
   (`deny_unknown_fields`), and one such entry fails the whole document — all
   runtimes, not just the new one. If you fetch the live index, upgrade to
-  ≥ v0.1.4 before the registry accepts a runtime that uses newer fields.
+  ≥ v0.2.0 before the registry accepts a runtime that uses newer fields.
 
 ## Push notifications for downstream sync
 
