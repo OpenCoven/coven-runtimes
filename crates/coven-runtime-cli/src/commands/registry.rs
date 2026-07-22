@@ -19,8 +19,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::{Args, Subcommand};
-use coven_runtime_registry::{RegistryEntry, RegistryIndex, INDEX_FORMAT};
-use coven_runtime_spec::validate_manifest;
+use coven_runtime_registry::{RegistryEntry, RegistryIndex, ResolveError, INDEX_FORMAT};
+use coven_runtime_spec::{parse_registry_version, validate_manifest};
 
 use super::{canonical_manifest, load_manifest, load_registry, manifest_digest};
 use crate::datetime::now_iso8601;
@@ -141,6 +141,16 @@ fn build_index(loc: &LocationArgs) -> Result<RegistryIndex> {
                 .and_then(|s| s.to_str())
                 .ok_or_else(|| anyhow!("bad version filename {}", version_file.display()))?
                 .to_string();
+            // The filename is the source of truth for the version even when the
+            // adapter omits its own `version` field, so it must be resolvable
+            // semver — otherwise the built index breaks "latest" resolution.
+            if parse_registry_version(&version).is_none() {
+                bail!(
+                    "{}: version filename `{version}` is not valid semver \
+                     (want MAJOR.MINOR.PATCH, e.g. 1.0.0)",
+                    version_file.display()
+                );
+            }
 
             let manifest = load_manifest(&version_file)?;
             let errors = validate_manifest(&manifest);
@@ -325,7 +335,10 @@ fn run_list(args: ListArgs) -> Result<()> {
                 entry.version,
                 capability_summary(entry)
             ),
-            Err(_) => println!("{id:<16} {:<8} (all versions yanked)", "-"),
+            Err(ResolveError::NoInstallableVersions(_)) => {
+                println!("{id:<16} {:<8} (all versions yanked)", "-")
+            }
+            Err(e) => println!("{id:<16} {:<8} (unresolvable: {e})", "-"),
         }
     }
     Ok(())
@@ -383,11 +396,12 @@ fn capability_summary(entry: &RegistryEntry) -> String {
     }
 }
 
-/// Numeric sort key for `major.minor.patch`, falling back to string order.
+/// Numeric sort key for `major.minor.patch` via the shared spec parser, with a
+/// defensive string-order fallback (build_index rejects non-semver filenames,
+/// so the fallback only matters for hand-edited indexes).
 fn version_key(v: &str) -> (u64, u64, u64, String) {
-    let mut parts = v.split('.');
-    let mut next = || parts.next().and_then(|s| s.parse().ok()).unwrap_or(0);
-    (next(), next(), next(), v.to_string())
+    let (major, minor, patch) = parse_registry_version(v).unwrap_or((0, 0, 0));
+    (major, minor, patch, v.to_string())
 }
 
 /// Directory entries as paths, sorted by file name for deterministic output.
