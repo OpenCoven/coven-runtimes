@@ -209,6 +209,56 @@ fn add_rejects_non_semver_version() {
     assert!(!sources.join("aria/not-semver.json").exists());
 }
 
+/// A source whose *filename* is not semver (and whose manifest omits `version`,
+/// so nothing else catches it) must fail the build — otherwise the compiled
+/// index breaks `resolve_latest` at install time.
+#[test]
+fn build_rejects_non_semver_version_filename() {
+    let dir = tempdir().unwrap();
+    let sources = dir.path().join("registry/runtimes");
+    let out = dir.path().join("canonical/index.json");
+    let versionless = ARIA_SRC.replace(",\n    \"version\": \"1.0.0\"", "");
+    assert!(!versionless.contains("version"), "fixture edit went stale");
+    write_source(&sources, "aria", "banana", &versionless);
+
+    let res = build(&sources, &out);
+    assert!(!res.status.success());
+    assert!(
+        stderr(&res).contains("version filename `banana` is not valid semver"),
+        "unexpected error: {}",
+        stderr(&res)
+    );
+    assert!(!out.exists());
+}
+
+/// `list` must not report an unresolvable (bad-semver) version as "yanked" —
+/// the two failure modes need different operator responses.
+#[test]
+fn list_distinguishes_unresolvable_from_yanked() {
+    let dir = tempdir().unwrap();
+    let sources = dir.path().join("registry/runtimes");
+    let out = dir.path().join("canonical/index.json");
+    write_source(&sources, "aria", "1.0.0", ARIA_SRC);
+    assert!(build(&sources, &out).status.success());
+
+    // Hand-edit the index the way an older/foreign tool might.
+    let broken = fs::read_to_string(&out)
+        .unwrap()
+        .replace("\"version\": \"1.0.0\"", "\"version\": \"one-oh\"");
+    fs::write(&out, broken).unwrap();
+
+    let res = conjure()
+        .args(["registry", "list", "--index"])
+        .arg(&out)
+        .output()
+        .unwrap();
+    assert!(res.status.success(), "{}", stderr(&res));
+    let stdout = String::from_utf8_lossy(&res.stdout);
+    assert!(stdout.contains("unresolvable"), "{stdout}");
+    assert!(stdout.contains("not valid semver"), "{stdout}");
+    assert!(!stdout.contains("yanked"), "{stdout}");
+}
+
 #[test]
 fn list_shows_accepted_runtimes() {
     let dir = tempdir().unwrap();

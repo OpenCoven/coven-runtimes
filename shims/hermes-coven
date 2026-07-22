@@ -68,11 +68,35 @@ strip_query() {
 # ${pre[@]:+"${pre[@]}"} guards against `set -u` on an empty array (bash 3.2).
 strip_query ${pre[@]:+"${pre[@]}"}
 
+# Coven prepends generic launch options before an adapter's prefix. Hermes,
+# however, parses `--model` as an option of its `chat` subcommand, so move that
+# pair behind the prefix before invoking the native CLI. Keep the value intact
+# (including an `=` form) and leave every other option in its original order.
+model_args=()
+passthrough=()
+for ((i = 0; i < ${#cleaned[@]}; i++)); do
+  case "${cleaned[i]}" in
+    --model)
+      model_args+=("${cleaned[i]}")
+      if ((i + 1 < ${#cleaned[@]})); then
+        i=$((i + 1))
+        model_args+=("${cleaned[i]}")
+      fi
+      ;;
+    --model=*)
+      model_args+=("${cleaned[i]}")
+      ;;
+    *)
+      passthrough+=("${cleaned[i]}")
+      ;;
+  esac
+done
+
 if [[ -n "${prompt//[[:space:]]/}" ]]; then
   # Non-interactive: hand the prompt to -q as its inline value. Any query flag
   # the prefix carried has already been stripped, so we never duplicate it.
-  exec hermes ${cleaned[@]:+"${cleaned[@]}"} -q "$prompt"
+  exec hermes ${passthrough[@]:+"${passthrough[@]}"} ${model_args[@]:+"${model_args[@]}"} -q "$prompt"
 else
   # Interactive REPL: no query to pass; launch with the query-free prefix.
-  exec hermes ${cleaned[@]:+"${cleaned[@]}"}
+  exec hermes ${passthrough[@]:+"${passthrough[@]}"} ${model_args[@]:+"${model_args[@]}"}
 fi

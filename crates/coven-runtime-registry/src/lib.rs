@@ -14,9 +14,11 @@
 //! fetch, or a bundled copy) and query it. Fetching/transport lives in the
 //! caller.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use coven_runtime_spec::{validate_adapter, RuntimeAdapter, ValidationError};
+use coven_runtime_spec::{
+    parse_registry_version, validate_adapter, RuntimeAdapter, ValidationError,
+};
 use serde::{Deserialize, Serialize};
 
 /// The registry index format version.
@@ -191,11 +193,19 @@ impl RegistryIndex {
     }
 
     /// Validate every adapter in the index (delegates to the spec's rules) and
-    /// additionally require each entry's `adapter.id` to match its runtime key.
+    /// additionally enforce the index-level invariants `resolve_latest` /
+    /// `resolve_exact` rely on:
+    ///
+    /// - each entry's `adapter.id` matches its runtime key;
+    /// - each entry's `version` is strict semver (else "latest" can't order it);
+    /// - versions are unique per runtime (else an exact pin is ambiguous);
+    /// - when the adapter declares its own `version`, it matches the entry's.
+    ///
     /// Returns all problems across the whole index.
     pub fn validate(&self) -> Vec<ValidationError> {
         let mut errors = Vec::new();
         for (runtime_id, entries) in &self.runtimes {
+            let mut seen_versions: BTreeSet<&str> = BTreeSet::new();
             for entry in entries {
                 if &entry.adapter.id != runtime_id {
                     errors.push(ValidationError {
@@ -204,6 +214,38 @@ impl RegistryIndex {
                         message: format!("adapter id does not match registry key `{runtime_id}`"),
                     });
                 }
+                if parse_registry_version(&entry.version).is_none() {
+                    errors.push(ValidationError {
+                        adapter_id: Some(runtime_id.clone()),
+                        field: "version",
+                        message: format!(
+                            "entry version `{}` is not valid semver (want MAJOR.MINOR.PATCH)",
+                            entry.version
+                        ),
+                    });
+                }
+                if !seen_versions.insert(&entry.version) {
+                    errors.push(ValidationError {
+                        adapter_id: Some(runtime_id.clone()),
+                        field: "version",
+                        message: format!(
+                            "duplicate entry for version `{}` — exact pins would be ambiguous",
+                            entry.version
+                        ),
+                    });
+                }
+                if let Some(declared) = &entry.adapter.version {
+                    if declared != &entry.version {
+                        errors.push(ValidationError {
+                            adapter_id: Some(runtime_id.clone()),
+                            field: "version",
+                            message: format!(
+                                "adapter declares version `{declared}` but the entry is published as `{}`",
+                                entry.version
+                            ),
+                        });
+                    }
+                }
                 errors.extend(validate_adapter(&entry.adapter));
             }
         }
@@ -211,9 +253,11 @@ impl RegistryIndex {
     }
 }
 
-/// Minimal semver (major.minor.patch) for ordering registry versions.
-/// Pre-release / build metadata is not supported yet; such versions fail to
-/// parse and surface as [`ResolveError::BadSemver`] rather than sorting wrong.
+/// Minimal semver (major.minor.patch) for ordering registry versions, reading
+/// versions via the spec's shared [`parse_registry_version`] so the resolver
+/// and the validators always agree on what parses. Pre-release / build
+/// metadata is not supported yet; such versions fail to parse and surface as
+/// [`ResolveError::BadSemver`] rather than sorting wrong.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct SemVer {
     major: u64,
@@ -223,13 +267,7 @@ struct SemVer {
 
 impl SemVer {
     fn parse(s: &str) -> Option<Self> {
-        let mut parts = s.trim().split('.');
-        let major = parts.next()?.parse().ok()?;
-        let minor = parts.next()?.parse().ok()?;
-        let patch = parts.next()?.parse().ok()?;
-        if parts.next().is_some() {
-            return None; // more than 3 segments
-        }
+        let (major, minor, patch) = parse_registry_version(s)?;
         Some(SemVer {
             major,
             minor,
@@ -443,6 +481,51 @@ mod tests {
     }
 
     #[test]
+    fn validate_flags_unresolvable_entry_version() {
+        // An index can be hand-edited (or built by an older tool) into a state
+        // `resolve_latest` chokes on; `validate` must surface that statically.
+        let idx = index_with("aria", vec![entry("aria", "not-semver", false)]);
+        let errs = idx.validate();
+        assert!(
+            errs.iter()
+                .any(|e| e.field == "version" && e.message.contains("not valid semver")),
+            "{errs:?}"
+        );
+    }
+
+    #[test]
+    fn validate_flags_duplicate_versions() {
+        let idx = index_with(
+            "aria",
+            vec![entry("aria", "1.0.0", false), entry("aria", "1.0.0", true)],
+        );
+        let errs = idx.validate();
+        assert!(
+            errs.iter()
+                .any(|e| e.field == "version" && e.message.contains("duplicate")),
+            "{errs:?}"
+        );
+    }
+
+    #[test]
+    fn validate_flags_adapter_entry_version_mismatch() {
+        let mut e = entry("aria", "1.0.0", false);
+        e.adapter.version = Some("2.0.0".into());
+        let idx = index_with("aria", vec![e]);
+        let errs = idx.validate();
+        assert!(
+            errs.iter()
+                .any(|e| e.field == "version" && e.message.contains("published as")),
+            "{errs:?}"
+        );
+
+        // A matching declared version is fine.
+        let mut ok = entry("aria", "1.0.0", false);
+        ok.adapter.version = Some("1.0.0".into());
+        assert!(index_with("aria", vec![ok]).validate().is_empty());
+    }
+
+    #[test]
     fn index_round_trips_json() {
         let idx = index_with("aria", vec![entry("aria", "1.0.0", false)]);
         let reparsed = RegistryIndex::from_json(&idx.to_json_pretty().unwrap()).unwrap();
@@ -471,7 +554,9 @@ mod tests {
     fn canonical_index_resolves_seeded_runtimes() {
         let idx = RegistryIndex::canonical();
         // The seeded accepted runtimes must resolve by "latest".
-        assert!(idx.resolve_latest("hermes").is_ok());
+        let hermes = idx.resolve_latest("hermes").expect("Hermes resolves");
+        assert_eq!(hermes.version, "1.0.2");
+        assert_eq!(hermes.adapter.model_flag.as_deref(), Some("--model"));
         assert!(idx.resolve_latest("copilot").is_ok());
     }
 }

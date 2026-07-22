@@ -6,8 +6,9 @@
 //! - the declared `executable` resolves on `PATH`;
 //! - it responds to a probe invocation (`--version` / `--help`) so we know the
 //!   binary is actually runnable, not just present;
-//! - declared model / sandbox / stream flags are plausibly referenced in the
-//!   probe output (a soft warning, never a hard failure — CLIs vary).
+//! - declared model / system-prompt / sandbox / stream flags are plausibly
+//!   referenced in the probe output (a soft warning, never a hard failure —
+//!   CLIs vary).
 //!
 //! It never sends a real prompt or does any work; probes are read-only and
 //! bounded. `--skip-binary` runs the static rules only (for CI without the
@@ -164,8 +165,10 @@ fn run_probe_command(executable: &str, flag: &str, timeout: Duration) -> std::io
 }
 
 /// Soft checks: if the adapter declares a flag, note when the probe output
-/// doesn't mention it. Never fails — CLIs don't always list every flag in
-/// `--help`, and `--version` output is short.
+/// doesn't mention it. Covers every flag the manifest can declare — model,
+/// system-prompt, sandbox, and stream args — since a typo in any of them
+/// only surfaces at real session time otherwise. Never fails — CLIs don't
+/// always list every flag in `--help`, and `--version` output is short.
 fn soft_flag_warnings(adapter: &RuntimeAdapter, probe_output: &str) -> Vec<String> {
     let mut warnings = Vec::new();
     let haystack = probe_output.to_lowercase();
@@ -179,9 +182,29 @@ fn soft_flag_warnings(adapter: &RuntimeAdapter, probe_output: &str) -> Vec<Strin
     if let Some(f) = &adapter.model_flag {
         check(f, "model");
     }
+    if let Some(f) = &adapter.system_prompt_flag {
+        check(f, "system-prompt");
+    }
     if let Some(s) = &adapter.sandbox {
         for flag in s.probe_flags() {
             check(flag, "sandbox");
+        }
+    }
+    if let Some(stream) = &adapter.stream_args {
+        // Only long-form (`--x`) prefix tokens: short flags and bare values
+        // like `stream-json` would false-positive against ordinary help text.
+        for token in stream
+            .prefix_args
+            .iter()
+            .filter(|t| t.starts_with("--") && t.len() > 2)
+        {
+            check(token, "stream");
+        }
+        if let Some(f) = &stream.session_id_flag {
+            check(f, "stream session-id");
+        }
+        if let Some(f) = &stream.resume_flag {
+            check(f, "stream resume");
         }
     }
     warnings
@@ -267,6 +290,42 @@ mod tests {
         let warnings = soft_flag_warnings(&a, "usage: --model <id>");
         assert_eq!(warnings.len(), 1);
         assert!(warnings[0].contains("--sandbox"));
+    }
+
+    #[test]
+    fn soft_warnings_cover_system_prompt_and_stream_flags() {
+        use coven_runtime_spec::StreamArgs;
+
+        let mut a = adapter("true");
+        a.system_prompt_flag = Some("--append-system-prompt".into());
+        a.stream_args = Some(StreamArgs {
+            // `-p` (short) and `stream-json` (bare value) must NOT be checked —
+            // only long-form flags are meaningful against help text.
+            prefix_args: vec!["-p".into(), "--output-format".into(), "stream-json".into()],
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+
+        // Nothing mentioned => model + sandbox + system-prompt + 1 long stream
+        // prefix flag + session-id + resume = 6 warnings.
+        let warnings = soft_flag_warnings(&a, "");
+        assert_eq!(warnings.len(), 6, "{warnings:?}");
+        assert!(warnings
+            .iter()
+            .any(|w| w.contains("--append-system-prompt")));
+        assert!(warnings.iter().any(|w| w.contains("--output-format")));
+        assert!(warnings.iter().any(|w| w.contains("--session-id")));
+        assert!(warnings.iter().any(|w| w.contains("--resume")));
+        assert!(!warnings.iter().any(|w| w.contains("`-p`")), "{warnings:?}");
+        assert!(
+            !warnings.iter().any(|w| w.contains("stream-json")),
+            "{warnings:?}"
+        );
+
+        // Help text mentioning all declared flags clears every warning.
+        let all_mentioned = "usage: --model --sandbox --append-system-prompt \
+                             --output-format --session-id --resume";
+        assert!(soft_flag_warnings(&a, all_mentioned).is_empty());
     }
 
     // Tiny helper so we can panic-print ProbeResult without a Debug impl on it.

@@ -483,20 +483,35 @@ pub fn valid_adapter_id(value: &str) -> bool {
 /// Minimal semver accepted by the registry: exactly `major.minor.patch`, with
 /// numeric components. Pre-release and build metadata are not ordered yet.
 pub fn valid_registry_version(value: &str) -> bool {
-    let mut parts = value.trim().split('.');
-    let Some(major) = parts.next() else {
-        return false;
-    };
-    let Some(minor) = parts.next() else {
-        return false;
-    };
-    let Some(patch) = parts.next() else {
-        return false;
-    };
-    parts.next().is_none()
-        && [major, minor, patch]
-            .iter()
-            .all(|part| !part.is_empty() && part.parse::<u64>().is_ok())
+    parse_registry_version(value).is_some()
+}
+
+/// Parse a registry version as strict `major.minor.patch` semver.
+///
+/// This is the single semver reader shared by the spec's validation, the
+/// registry's "latest" resolution, and `conjure registry`'s sorting, so all
+/// three always accept exactly the same strings. Numeric components follow
+/// SemVer 2.0.0's numeric-identifier rule: ASCII digits only (no sign, no
+/// whitespace) and no leading zeros — so `1.02.0` can't shadow `1.2.0`.
+pub fn parse_registry_version(value: &str) -> Option<(u64, u64, u64)> {
+    fn numeric(part: &str) -> Option<u64> {
+        let strict = part.bytes().all(|b| b.is_ascii_digit())
+            && !part.is_empty()
+            && (part.len() == 1 || !part.starts_with('0'));
+        if strict {
+            part.parse().ok()
+        } else {
+            None
+        }
+    }
+    let mut parts = value.split('.');
+    let major = numeric(parts.next()?)?;
+    let minor = numeric(parts.next()?)?;
+    let patch = numeric(parts.next()?)?;
+    if parts.next().is_some() {
+        return None; // more than 3 segments
+    }
+    Some((major, minor, patch))
 }
 
 #[cfg(test)]
@@ -574,6 +589,32 @@ mod tests {
         assert!(errs
             .iter()
             .any(|e| e.field == "version" && e.message.contains("not valid semver")));
+    }
+
+    #[test]
+    fn parse_registry_version_accepts_strict_semver_only() {
+        assert_eq!(parse_registry_version("1.2.3"), Some((1, 2, 3)));
+        assert_eq!(parse_registry_version("0.0.0"), Some((0, 0, 0)));
+        assert_eq!(parse_registry_version("10.20.30"), Some((10, 20, 30)));
+
+        for bad in [
+            "",
+            "1",
+            "1.2",
+            "1.2.3.4",
+            "v1.2.3",
+            "1.2.3-beta", // pre-release not ordered yet
+            "01.2.3",     // leading zero
+            "1.02.3",     // leading zero would shadow 1.2.3
+            "+1.2.3",     // u64::from_str would accept the sign
+            " 1.2.3",     // whitespace
+            "1.2.3 ",     // whitespace
+            "1..3",
+            "1.2.x",
+        ] {
+            assert_eq!(parse_registry_version(bad), None, "accepted `{bad}`");
+            assert!(!valid_registry_version(bad), "accepted `{bad}`");
+        }
     }
 
     #[test]
