@@ -203,7 +203,10 @@ conjure registry list      # your runtime shows up with its capabilities
 ```
 aria             0.1.0    baseline
 copilot          1.0.0    stream, preassignedSessionId
-hermes           1.0.0    baseline
+coven-code       1.0.1    stream, preassignedSessionId, think, speed
+grok             1.0.0    preassignedSessionId
+hermes           1.0.2    baseline
+opencode         0.1.0    baseline
 ```
 
 Two paths, depending on your confidence:
