@@ -111,6 +111,28 @@ fn registry_index_without_flag_fails_loudly() {
 }
 
 #[test]
+fn manifest_with_registry_flag_fails_with_shape_hint() {
+    // The mirror case: an adapter manifest run with --registry must point at
+    // the mode mix-up, not report its `adapters` key as unrecognized content.
+    let dir = tempdir().unwrap();
+    let path = write(dir.path(), "manifest.json", MANIFEST_JSON);
+    let out = conjure()
+        .arg("validate")
+        .arg("--registry")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(!out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("looks like an adapter manifest"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("without --registry"), "{stderr}");
+    assert!(!stderr.contains("does not recognize"), "{stderr}");
+}
+
+#[test]
 fn registry_with_typoed_entry_field_is_rejected() {
     // Tolerant crate-level parsing must not let `validate --registry` bless a
     // typo: the strict raw check refuses unrecognized index content.
