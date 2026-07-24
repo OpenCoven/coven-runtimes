@@ -181,6 +181,7 @@ fn soft_flag_warnings(adapter: &RuntimeAdapter, probe_output: &str) -> Vec<Strin
     let haystack = probe_output.to_lowercase();
     let mut seen: Vec<String> = Vec::new();
     let mut check = |flag: &str, what: &str| {
+        let flag = flag.trim();
         let needle = flag.to_lowercase();
         if flag.is_empty() || seen.contains(&needle) {
             return;
@@ -436,6 +437,26 @@ mod tests {
         assert!(!warnings.iter().any(|w| w.contains("--single")));
         assert!(!warnings.iter().any(|w| w.contains("--session-id")));
         assert!(!warnings.iter().any(|w| w.contains("--resume")));
+    }
+
+    #[test]
+    fn soft_warnings_trim_and_dedupe_whitespace_flags() {
+        let mut a = adapter("probe");
+        a.prompt_flag = Some("  --single  ".into());
+        a.interactive_prompt_flag = Some("--single".into());
+        a.system_prompt_flag = Some("   ".into());
+
+        let warnings = soft_flag_warnings(&a, "");
+        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        assert_eq!(
+            warnings.iter().filter(|w| w.contains("--single")).count(),
+            1,
+            "trimmed duplicates must be checked once: {warnings:?}"
+        );
+        assert!(
+            !warnings.iter().any(|w| w.contains("system-prompt")),
+            "{warnings:?}"
+        );
     }
 
     // Tiny helper so we can panic-print ProbeResult without a Debug impl on it.
