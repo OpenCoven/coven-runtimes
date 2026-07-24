@@ -181,9 +181,10 @@ runtime present:
 
 - the `executable` resolves on `PATH`;
 - it runs cleanly for a bounded probe (`--version`, then `--help`);
-- declared `model_flag` / `system_prompt_flag` / sandbox / stream flags are
-  mentioned in probe output (a **soft warning** only — CLIs don't always list
-  every flag).
+- every declared flag — `model_flag`, `system_prompt_flag`, the prompt
+  bindings, sandbox, stream, continuity, and the long-form (`--x`) tokens of
+  each launch-arg list — is mentioned in probe output (a **soft warning**
+  only — CLIs don't always list every flag).
 
 The probe never sends a prompt or does work. Use `--skip-binary` in CI where the
 runtime isn't installed.

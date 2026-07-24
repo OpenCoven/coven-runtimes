@@ -6,7 +6,8 @@
 //! - the declared `executable` resolves on `PATH`;
 //! - it responds to a probe invocation (`--version` / `--help`) so we know the
 //!   binary is actually runnable, not just present;
-//! - declared model / system-prompt / sandbox / stream flags are plausibly
+//! - declared flags — model, system-prompt, prompt binding, sandbox, stream,
+//!   session continuity, and long-form launch-arg tokens — are plausibly
 //!   referenced in the probe output (a soft warning, never a hard failure —
 //!   CLIs vary).
 //!
@@ -166,14 +167,26 @@ fn run_probe_command(executable: &str, flag: &str, timeout: Duration) -> std::io
 
 /// Soft checks: if the adapter declares a flag, note when the probe output
 /// doesn't mention it. Covers every flag the manifest can declare — model,
-/// system-prompt, sandbox, and stream args — since a typo in any of them
+/// system-prompt, prompt binding, sandbox, stream, continuity, and the
+/// long-form tokens of every launch-arg list — since a typo in any of them
 /// only surfaces at real session time otherwise. Never fails — CLIs don't
 /// always list every flag in `--help`, and `--version` output is short.
+///
+/// Each distinct flag is checked (and warned about) once, labeled with the
+/// first role it appears in: manifests commonly repeat a flag across launch
+/// modes (e.g. Grok's `--single` as both prompt bindings), and the probe
+/// output can't distinguish roles anyway.
 fn soft_flag_warnings(adapter: &RuntimeAdapter, probe_output: &str) -> Vec<String> {
     let mut warnings = Vec::new();
     let haystack = probe_output.to_lowercase();
+    let mut seen: Vec<String> = Vec::new();
     let mut check = |flag: &str, what: &str| {
-        if !flag.is_empty() && !haystack.contains(&flag.to_lowercase()) {
+        let needle = flag.to_lowercase();
+        if flag.is_empty() || seen.contains(&needle) {
+            return;
+        }
+        seen.push(needle.clone());
+        if !haystack.contains(&needle) {
             warnings.push(format!(
                 "declared {what} flag `{flag}` not seen in probe output (verify manually)"
             ));
@@ -185,19 +198,25 @@ fn soft_flag_warnings(adapter: &RuntimeAdapter, probe_output: &str) -> Vec<Strin
     if let Some(f) = &adapter.system_prompt_flag {
         check(f, "system-prompt");
     }
+    if let Some(f) = &adapter.prompt_flag {
+        check(f, "prompt");
+    }
+    if let Some(f) = &adapter.interactive_prompt_flag {
+        check(f, "interactive-prompt");
+    }
+    for token in long_flags(&adapter.interactive_prompt_prefix_args) {
+        check(token, "interactive launch");
+    }
+    for token in long_flags(&adapter.non_interactive_prompt_prefix_args) {
+        check(token, "non-interactive launch");
+    }
     if let Some(s) = &adapter.sandbox {
         for flag in s.probe_flags() {
             check(flag, "sandbox");
         }
     }
     if let Some(stream) = &adapter.stream_args {
-        // Only long-form (`--x`) prefix tokens: short flags and bare values
-        // like `stream-json` would false-positive against ordinary help text.
-        for token in stream
-            .prefix_args
-            .iter()
-            .filter(|t| t.starts_with("--") && t.len() > 2)
-        {
+        for token in long_flags(&stream.prefix_args) {
             check(token, "stream");
         }
         if let Some(f) = &stream.session_id_flag {
@@ -207,7 +226,30 @@ fn soft_flag_warnings(adapter: &RuntimeAdapter, probe_output: &str) -> Vec<Strin
             check(f, "stream resume");
         }
     }
+    if let Some(continuity) = &adapter.continuity_args {
+        for token in long_flags(&continuity.init_prefix_args) {
+            check(token, "continuity init");
+        }
+        for token in long_flags(&continuity.resume_prefix_args) {
+            check(token, "continuity resume");
+        }
+        if let Some(f) = continuity.session_id_flag() {
+            check(f, "continuity session-id");
+        }
+        if let Some(f) = continuity.resume_flag() {
+            check(f, "continuity resume");
+        }
+    }
     warnings
+}
+
+/// Only long-form (`--x`) tokens of a launch-arg list are probe-checkable:
+/// short flags and bare values like `stream-json` or `exec` would
+/// false-positive against ordinary help text.
+fn long_flags(args: &[String]) -> impl Iterator<Item = &str> {
+    args.iter()
+        .map(String::as_str)
+        .filter(|t| t.starts_with("--") && t.len() > 2)
 }
 
 #[cfg(test)]
@@ -330,6 +372,70 @@ mod tests {
         let all_mentioned = "usage: --model --sandbox --append-system-prompt \
                              --output-format --session-id --resume";
         assert!(soft_flag_warnings(&a, all_mentioned).is_empty());
+    }
+
+    /// Grok-shaped adapter: prompt bindings, launch prefix args, and
+    /// continuity flags are covered, repeated flags are checked once, and
+    /// bare values in launch-arg lists stay exempt.
+    #[test]
+    fn soft_warnings_cover_prompt_launch_and_continuity_flags() {
+        use coven_runtime_spec::ContinuityArgs;
+
+        let mut a = adapter("grok");
+        a.system_prompt_flag = Some("--rules".into());
+        // Same flag bound to both prompt roles — must warn once, not twice.
+        a.prompt_flag = Some("--single".into());
+        a.interactive_prompt_flag = Some("--single".into());
+        let launch = vec![
+            "--no-auto-update".into(),
+            "--no-alt-screen".into(),
+            "--output-format".into(),
+            "plain".into(), // bare value: never checked
+        ];
+        a.interactive_prompt_prefix_args = launch.clone();
+        a.non_interactive_prompt_prefix_args = launch.clone();
+        a.sandbox = Some(SandboxMapping::Args {
+            full_args: vec!["--permission-mode".into(), "bypassPermissions".into()],
+            read_only_args: vec!["--sandbox".into(), "read-only".into()],
+        });
+        a.continuity_args = Some(ContinuityArgs {
+            init_prefix_args: launch.clone(),
+            resume_prefix_args: launch,
+            session_id_flag: Some("--session-id".into()),
+            resume_flag: Some("--resume".into()),
+        });
+
+        // Empty probe output: one warning per distinct flag —
+        // --model, --rules, --single, --no-auto-update, --no-alt-screen,
+        // --output-format, --permission-mode, --sandbox, --session-id,
+        // --resume.
+        let warnings = soft_flag_warnings(&a, "");
+        assert_eq!(warnings.len(), 10, "{warnings:?}");
+        assert!(warnings
+            .iter()
+            .any(|w| w.contains("prompt flag `--single`")));
+        assert!(warnings
+            .iter()
+            .any(|w| w.contains("continuity session-id flag `--session-id`")));
+        assert!(warnings
+            .iter()
+            .any(|w| w.contains("continuity resume flag `--resume`")));
+        assert_eq!(
+            warnings.iter().filter(|w| w.contains("--single")).count(),
+            1,
+            "repeated flags must be checked once: {warnings:?}"
+        );
+        assert!(
+            !warnings.iter().any(|w| w.contains("`plain`")),
+            "{warnings:?}"
+        );
+
+        // Mentioning the continuity + prompt flags clears exactly those.
+        let warnings = soft_flag_warnings(&a, "usage: --single --session-id --resume");
+        assert_eq!(warnings.len(), 7, "{warnings:?}");
+        assert!(!warnings.iter().any(|w| w.contains("--single")));
+        assert!(!warnings.iter().any(|w| w.contains("--session-id")));
+        assert!(!warnings.iter().any(|w| w.contains("--resume")));
     }
 
     // Tiny helper so we can panic-print ProbeResult without a Debug impl on it.
