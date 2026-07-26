@@ -14,7 +14,8 @@ use crate::template::{scaffold, Flavor};
 pub struct NewArgs {
     /// Canonical adapter id (lowercase letters, digits, '.', '_', '-').
     pub id: String,
-    /// Starting point: `minimal` (one-shot) or `streaming` (stream + sandbox).
+    /// Starting point: `minimal` (one-shot), `streaming` (stream + sandbox),
+    /// or `continuity` (one-shot with native session init/resume).
     #[arg(long, default_value = "minimal")]
     pub flavor: String,
     /// Output path. Defaults to `<id>.json` in the current directory.
