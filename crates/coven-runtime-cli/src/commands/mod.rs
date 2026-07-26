@@ -88,6 +88,16 @@ pub(crate) fn load_registry(path: &Path) -> Result<RegistryIndex> {
         .with_context(|| format!("failed to parse registry index {}", path.display()))?;
     let unknown = coven_runtime_registry::unknown_index_fields(&value);
     if !unknown.is_empty() {
+        // Mirror load_manifest's shape hint: an adapter manifest run with
+        // --registry must not surface as an opaque "unrecognized content"
+        // error about its `adapters` key.
+        if value.get("adapters").is_some() && value.get("runtimes").is_none() {
+            anyhow::bail!(
+                "{} looks like an adapter manifest, not a registry index; \
+                 re-run without --registry",
+                path.display()
+            );
+        }
         anyhow::bail!(
             "registry index {} contains content this conjure does not recognize \
              (typo, or written by a newer spec — upgrade conjure before validating \
