@@ -112,6 +112,18 @@ Guidance that isn't obvious from the field reference:
 - **Only one of `model_flag` / `model_arg_template`** is needed. Use the
   template form (`"--model {model}"`-style argv) only when selection is more
   than `--flag value`; it must contain `{model}`.
+- **Model ids default to `strip_provider`**, which removes only the first
+  provider segment before forwarding the id:
+
+  ```text
+  strip_provider: openai/gpt-5 -> gpt-5
+  strip_provider: openrouter/anthropic/claude -> anthropic/claude
+  preserve: openrouter/anthropic/claude -> openrouter/anthropic/claude
+  ```
+
+  Set `"model_id_transform": "preserve"` only when the runtime expects the
+  complete id. `preserve` is non-default and requires a real model mechanism:
+  `model_flag` or `model_arg_template`.
 - **Streaming runtimes** additionally need:
 
   ```jsonc
@@ -137,7 +149,9 @@ Guidance that isn't obvious from the field reference:
 
 Editor support: point your editor's JSON language server at
 [`schema/adapter-manifest.schema.json`](../schema/adapter-manifest.schema.json)
-for completion and inline validation while you edit.
+for completion and inline validation while you edit. Unknown fields remain an
+authoring error. Read-only index parsing is tolerant of newer fields from
+v0.2.0 onward; authoring and registry-mutation paths stay strict.
 
 ## 4. Validate
 

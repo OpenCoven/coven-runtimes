@@ -263,7 +263,13 @@ pub struct RuntimeAdapter {
 impl RuntimeAdapter {
     /// Whether this adapter declares any model-selection mechanism.
     pub fn supports_model(&self) -> bool {
-        self.model_flag.is_some() || self.model_arg_template.is_some()
+        self.model_flag
+            .as_deref()
+            .is_some_and(|flag| !flag.trim().is_empty())
+            || self
+                .model_arg_template
+                .as_deref()
+                .is_some_and(|template| !template.trim().is_empty())
     }
 
     /// Whether this adapter declares a sandbox/permission mechanism.
@@ -335,6 +341,50 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.to_string().contains("unknown variant"));
+    }
+
+    #[test]
+    fn duplicate_model_id_transform_aliases_are_rejected() {
+        for (snake, camel) in [("preserve", "preserve"), ("preserve", "strip_provider")] {
+            let error = AdapterManifest::from_json(&format!(
+                r#"{{
+                    "adapters": [{{
+                        "id": "x",
+                        "label": "X",
+                        "executable": "x",
+                        "install_hint": "h",
+                        "model_id_transform": "{snake}",
+                        "modelIdTransform": "{camel}"
+                    }}]
+                }}"#
+            ))
+            .unwrap_err();
+            assert!(
+                error.to_string().contains("duplicate field"),
+                "unexpected error for {snake}/{camel}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn supports_model_requires_non_blank_selector() {
+        let mut candidate = adapter(
+            r#"{ "adapters": [{ "id": "x", "label": "X", "executable": "x", "install_hint": "h" }]}"#,
+        );
+        assert!(!candidate.supports_model());
+
+        candidate.model_flag = Some(" \t ".into());
+        assert!(!candidate.supports_model());
+
+        candidate.model_flag = Some("--model".into());
+        assert!(candidate.supports_model());
+
+        candidate.model_flag = None;
+        candidate.model_arg_template = Some(" \n ".into());
+        assert!(!candidate.supports_model());
+
+        candidate.model_arg_template = Some("-c model={model}".into());
+        assert!(candidate.supports_model());
     }
 
     /// The current hermes.json shipped by coven must deserialize unchanged, with

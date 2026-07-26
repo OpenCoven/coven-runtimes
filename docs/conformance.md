@@ -42,10 +42,22 @@ parse; canonical output is snake_case.
 
 | Field (aliases) | Type | Rule |
 |-----------------|------|------|
-| `model_flag` (`modelFlag`) | string \| null | Simple `--flag <value>` selector. |
+| `model_flag` (`modelFlag`) | string \| null | Simple `--flag <value>` selector. **Non-blank when present.** |
 | `model_arg_template` (`modelArgTemplate`) | string \| null | argv template for non-trivial selection. **Must contain `{model}`.** Takes precedence over `model_flag`. |
+| `model_id_transform` (`modelIdTransform`) | string | `strip_provider` (default) or `preserve`. `preserve` requires `model_flag` or `model_arg_template`. |
 
 Declare neither and `coven run --model` is a warned no-op for the runtime.
+Model ids transform as follows:
+
+```text
+strip_provider: openai/gpt-5 -> gpt-5
+strip_provider: openrouter/anthropic/claude -> anthropic/claude
+preserve: openrouter/anthropic/claude -> openrouter/anthropic/claude
+```
+
+`strip_provider` removes only the first provider segment. `preserve` forwards
+the complete id and is non-default; it is valid only when the adapter declares
+a real model-selection mechanism.
 
 ### Capabilities
 
@@ -130,16 +142,17 @@ stream mode (GitHub Copilot CLI, Grok Build).
 
 Two layers with different strictness:
 
-- **Parsing is tolerant.** `coven-runtime-spec` ignores fields it does not
-  recognize. A registry index written by a newer spec version therefore
-  still loads on older consumers, degrading only the affected adapter instead
-  of failing the whole document. (Spec versions ≤ 0.1.3 predate this rule and
-  reject any index containing newer fields — see
+- **Read-only index parsing is tolerant from v0.2.0 onward.**
+  `coven-runtime-spec` ignores fields it does not recognize, so a registry
+  index written by a newer spec version still loads on older consumers,
+  degrading only the affected adapter instead of failing the whole document.
+  (Spec versions ≤ 0.1.3 predate this rule and reject any index containing
+  newer fields — see
   [`adoption.md`](adoption.md).)
-- **Authoring is strict.** `conjure` rejects any field no spec version
-  recognizes (`unknown_manifest_fields`), and the JSON Schema declares
-  `additionalProperties: false`, so typos fail before a manifest reaches the
-  registry.
+- **Unknown fields remain an authoring error.** `conjure` rejects fields this
+  spec version does not recognize (`unknown_manifest_fields`), and the JSON
+  Schema declares `additionalProperties: false`, so typos fail before a
+  manifest reaches the registry.
 
 `conjure` applies the strict layer to **registry indexes too** (`validate
 --registry`, `registry build`, `registry yank`): those flows load and rewrite
@@ -162,15 +175,17 @@ sandbox shape is a spec-version event, not a silently-ignorable addition.
 3. Executable is a bare command name.
 4. `label` and `install_hint` are non-empty.
 5. `model_arg_template`, if present, contains `{model}`.
-6. `sandbox`, if present, has non-empty `flag` / `full` / `read_only` (flag
+6. `model_id_transform: preserve` requires `model_flag` or
+   `model_arg_template`.
+7. `sandbox`, if present, has non-empty `flag` / `full` / `read_only` (flag
    form) or ≥1 non-empty token in each of `full_args` / `read_only_args`
    (args form).
-7. `capabilities.stream` ⇒ `stream_args` with non-empty `prefix_args`.
-8. `capabilities.preassigned_session_id` ⇒ the session id flag on the active
+8. `capabilities.stream` ⇒ `stream_args` with non-empty `prefix_args`.
+9. `capabilities.preassigned_session_id` ⇒ the session id flag on the active
    launch path: `stream_args.session_id_flag` for streaming adapters,
    `continuity_args.session_id_flag` otherwise.
-9. `stream_args` present ⇒ `capabilities.stream` true (no dead config).
-10. `continuity_args` present ⇒ a usable init or resume launch; its
+10. `stream_args` present ⇒ `capabilities.stream` true (no dead config).
+11. `continuity_args` present ⇒ a usable init or resume launch; its
     `session_id_flag` requires `capabilities.preassigned_session_id`
     (no dead config).
 

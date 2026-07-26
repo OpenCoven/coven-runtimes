@@ -14,12 +14,13 @@
 //! - a `sandbox` mapping must have a non-empty flag and both values (flag
 //!   form), or a non-empty argv list per policy (args form).
 //! - `model_arg_template` must contain the `{model}` placeholder.
+//! - `model_id_transform: preserve` requires a declared model mechanism.
 //!
 //! Validation is pure (no filesystem, no process spawning) so it runs anywhere:
 //! `conjure validate`, coven's loader, and CI all share the same rules.
 
 use crate::capabilities::Capabilities;
-use crate::manifest::{AdapterManifest, RuntimeAdapter};
+use crate::manifest::{AdapterManifest, ModelIdTransform, RuntimeAdapter};
 use crate::sandbox::SandboxMapping;
 
 /// Ids reserved by coven's built-in harnesses. A manifest adapter may not
@@ -161,6 +162,17 @@ fn validate_adapter_into(adapter: &RuntimeAdapter, errors: &mut Vec<ValidationEr
     }
 
     // ── model selection ─────────────────────────────────────────────────────
+    if adapter
+        .model_flag
+        .as_deref()
+        .is_some_and(|flag| flag.trim().is_empty())
+    {
+        errors.push(err(
+            tag(),
+            "model_flag",
+            "`model_flag` must not be blank; omit it when the runtime has no model flag",
+        ));
+    }
     if let Some(template) = adapter.model_arg_template.as_deref() {
         if !template.contains("{model}") {
             errors.push(err(
@@ -169,6 +181,13 @@ fn validate_adapter_into(adapter: &RuntimeAdapter, errors: &mut Vec<ValidationEr
                 "template must contain the `{model}` placeholder",
             ));
         }
+    }
+    if adapter.model_id_transform == ModelIdTransform::Preserve && !adapter.supports_model() {
+        errors.push(err(
+            tag(),
+            "model_id_transform",
+            "`preserve` requires model_flag or model_arg_template",
+        ));
     }
 
     // ── sandbox mapping ─────────────────────────────────────────────────────
@@ -337,6 +356,8 @@ const ADAPTER_FIELDS: &[&str] = &[
     "modelFlag",
     "model_arg_template",
     "modelArgTemplate",
+    "model_id_transform",
+    "modelIdTransform",
     "capabilities",
     "sandbox",
     "stream_args",
@@ -517,7 +538,7 @@ pub fn parse_registry_version(value: &str) -> Option<(u64, u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{ContinuityArgs, ModelIdTransform, StreamArgs};
+    use crate::manifest::{ContinuityArgs, StreamArgs};
     use crate::sandbox::SandboxMapping;
 
     fn base_adapter(id: &str) -> RuntimeAdapter {
@@ -761,6 +782,63 @@ mod tests {
     }
 
     #[test]
+    fn preserve_transform_requires_model_selection() {
+        let mut adapter = base_adapter("x");
+        adapter.model_id_transform = ModelIdTransform::Preserve;
+        let errors = validate_adapter(&adapter);
+        assert!(errors.iter().any(|error| {
+            error.field == "model_id_transform"
+                && error
+                    .message
+                    .contains("requires model_flag or model_arg_template")
+        }));
+
+        adapter.model_flag = Some("--model".into());
+        assert!(validate_adapter(&adapter).is_empty());
+
+        adapter.model_flag = None;
+        adapter.model_arg_template = Some("-c model={model}".into());
+        assert!(validate_adapter(&adapter).is_empty());
+    }
+
+    #[test]
+    fn preserve_transform_null_selectors_do_not_satisfy_model_selection() {
+        let manifest = AdapterManifest::from_json(
+            r#"{
+                "adapters": [{
+                    "id": "x",
+                    "label": "X",
+                    "executable": "x",
+                    "install_hint": "install",
+                    "model_flag": null,
+                    "model_arg_template": null,
+                    "model_id_transform": "preserve"
+                }]
+            }"#,
+        )
+        .unwrap();
+        let errors = validate_adapter(&manifest.adapters[0]);
+        assert!(errors
+            .iter()
+            .any(|error| error.field == "model_id_transform"));
+    }
+
+    #[test]
+    fn blank_model_flag_is_rejected_and_does_not_support_preserve() {
+        let mut adapter = base_adapter("x");
+        adapter.model_flag = Some(" \t ".into());
+        adapter.model_id_transform = ModelIdTransform::Preserve;
+
+        let errors = validate_adapter(&adapter);
+        assert!(errors.iter().any(|error| {
+            error.field == "model_flag" && error.message.contains("must not be blank")
+        }));
+        assert!(errors
+            .iter()
+            .any(|error| error.field == "model_id_transform"));
+    }
+
+    #[test]
     fn sandbox_flag_form_requires_non_empty_values() {
         let mut a = base_adapter("x");
         a.sandbox = Some(SandboxMapping::Flag {
@@ -863,6 +941,7 @@ mod tests {
         grok.system_prompt_flag = Some("--rules".into());
         grok.model_flag = Some("--model".into());
         grok.model_arg_template = Some("-c model={model}".into());
+        grok.model_id_transform = ModelIdTransform::Preserve;
         grok.capabilities.preassigned_session_id = true;
         grok.sandbox = Some(SandboxMapping::Args {
             full_args: vec!["--sandbox".into(), "off".into()],
@@ -908,6 +987,7 @@ mod tests {
                 "promptFlag":"--single","interactivePromptFlag":"--single",
                 "interactivePromptPrefixArgs":[],"nonInteractivePromptPrefixArgs":["run"],
                 "systemPromptFlag":null,"modelFlag":"--model","modelArgTemplate":null,
+                "modelIdTransform":"preserve",
                 "capabilities":{"preassignedSessionId":true},
                 "sandbox":{"fullArgs":["a"],"readOnlyArgs":["b"]},
                 "streamArgs":{"prefixArgs":["-p"],"sessionIdFlag":"--session-id","resumeFlag":"--resume"},
