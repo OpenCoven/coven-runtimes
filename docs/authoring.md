@@ -69,6 +69,12 @@ and resumes them (`--resume`) through `continuity_args`. Its args are generic
 placeholders — replace them with your runtime's real flags (see
 [grok.json](../examples/grok.json) for a filled-in example).
 
+> **Prefer a live loop?** `conjure studio aria.json --flavor minimal` opens
+> the same scaffold in an interactive TUI where steps 3–5 below happen on one
+> screen: every edit re-validates, a panel previews the argv Coven would
+> compose, and `t` runs the conformance probe. See [studio.md](studio.md).
+> The JSON walkthrough below is the reference either way.
+
 ## 3. Fill in the manifest
 
 Work through the scaffold top to bottom. Using a real example (the shape the

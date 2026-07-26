@@ -3,6 +3,7 @@
 mod commands;
 mod datetime;
 mod sha256;
+mod studio;
 mod template;
 
 use clap::{Parser, Subcommand};
@@ -26,6 +27,8 @@ struct Cli {
 enum Command {
     /// Scaffold a new adapter manifest from a template.
     New(commands::new::NewArgs),
+    /// Author a manifest interactively: live validation, launch preview, and probing (TUI).
+    Studio(commands::studio::StudioArgs),
     /// Validate an adapter manifest against the shared spec rules.
     Validate(commands::validate::ValidateArgs),
     /// Run conformance checks: probe the runtime binary for its declared capabilities.
@@ -40,6 +43,7 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::New(args) => commands::new::run(args),
+        Command::Studio(args) => commands::studio::run(args),
         Command::Validate(args) => commands::validate::run(args),
         Command::Test(args) => commands::test::run(args),
         Command::Package(args) => commands::package::run(args),

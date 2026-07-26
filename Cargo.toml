@@ -20,6 +20,7 @@ serde_json = "1"
 thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 tempfile = "3"
+ratatui = "0.30"
 
 # Internal crates reference each other through the workspace. Explicit versions
 # (not bare paths) keep them out of cargo-deny's wildcard ban and make the crates
