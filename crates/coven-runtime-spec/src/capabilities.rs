@@ -70,6 +70,23 @@ impl Capabilities {
             ("speed", self.speed),
         ]
     }
+
+    /// One-line human summary: the enabled capability names joined with
+    /// `", "`, or `"baseline"` when none are. The single spelling used by
+    /// every `conjure` listing (`registry list`, `validate --verbose`).
+    pub fn summary(self) -> String {
+        let on: Vec<&str> = self
+            .as_pairs()
+            .iter()
+            .filter(|(_, enabled)| *enabled)
+            .map(|(name, _)| *name)
+            .collect();
+        if on.is_empty() {
+            "baseline".to_string()
+        } else {
+            on.join(", ")
+        }
+    }
 }
 
 #[cfg(test)]
@@ -114,5 +131,17 @@ mod tests {
             .map(|(n, _)| *n)
             .collect();
         assert_eq!(names, ["stream", "preassignedSessionId", "think", "speed"]);
+    }
+
+    #[test]
+    fn summary_joins_enabled_or_reports_baseline() {
+        assert_eq!(Capabilities::BASELINE.summary(), "baseline");
+        let caps = Capabilities {
+            stream: true,
+            preassigned_session_id: true,
+            think: false,
+            speed: true,
+        };
+        assert_eq!(caps.summary(), "stream, preassignedSessionId, speed");
     }
 }

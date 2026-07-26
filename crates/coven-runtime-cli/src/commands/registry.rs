@@ -337,7 +337,7 @@ fn run_list(args: ListArgs) -> Result<()> {
             Ok(entry) => println!(
                 "{id:<16} {:<8} {}",
                 entry.version,
-                capability_summary(entry)
+                entry.adapter.capabilities.summary()
             ),
             Err(ResolveError::NoInstallableVersions(_)) => {
                 println!("{id:<16} {:<8} (all versions yanked)", "-")
@@ -381,23 +381,6 @@ fn run_yank(args: YankArgs) -> Result<()> {
         if target { "yanked" } else { "installable" }
     );
     Ok(())
-}
-
-/// A one-line "stream, think" style capability summary, or "baseline".
-fn capability_summary(entry: &RegistryEntry) -> String {
-    let on: Vec<&str> = entry
-        .adapter
-        .capabilities
-        .as_pairs()
-        .iter()
-        .filter(|(_, on)| *on)
-        .map(|(name, _)| *name)
-        .collect();
-    if on.is_empty() {
-        "baseline".to_string()
-    } else {
-        on.join(", ")
-    }
 }
 
 /// Numeric sort key for `major.minor.patch` via the shared spec parser, with a

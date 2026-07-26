@@ -30,21 +30,12 @@ pub fn run(args: ValidateArgs) -> Result<()> {
 
     if args.verbose {
         for adapter in &manifest.adapters {
-            let caps: Vec<&str> = adapter
-                .capabilities
-                .as_pairs()
-                .iter()
-                .filter(|(_, on)| *on)
-                .map(|(n, _)| *n)
-                .collect();
-            let caps = if caps.is_empty() {
-                "baseline".to_string()
-            } else {
-                caps.join(", ")
-            };
             println!(
                 "· {} ({}) — exe `{}`, capabilities: {}",
-                adapter.id, adapter.label, adapter.executable, caps
+                adapter.id,
+                adapter.label,
+                adapter.executable,
+                adapter.capabilities.summary()
             );
         }
     }
