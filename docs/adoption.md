@@ -21,7 +21,7 @@ how you adopt newly accepted runtimes.
 ```toml
 # Cargo.toml
 [dependencies]
-coven-runtime-registry = "0.1"   # (or a git/path dep until published)
+coven-runtime-registry = "0.2"   # (or a git/path dep until published)
 ```
 
 ```rust
@@ -54,7 +54,7 @@ Each tagged release attaches:
 Pin to a **release tag** and verify the checksum before trusting the file:
 
 ```sh
-TAG=v0.1.0
+TAG=v0.2.0
 base="https://github.com/OpenCoven/coven-runtimes/releases/download/$TAG"
 curl -fsSLO "$base/registry-index.json"
 curl -fsSLO "$base/registry-index.json.sha256"

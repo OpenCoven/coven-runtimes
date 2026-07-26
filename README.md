@@ -17,7 +17,7 @@ See [`docs/registry.md`](docs/registry.md) (how it's maintained),
 [`docs/adoption.md`](docs/adoption.md) (how to consume it), and
 [`GOVERNANCE.md`](GOVERNANCE.md) (the acceptance bar).
 
-> Status: v0.1 — the spec, CLI, and registry are implemented and tested. The
+> Status: v0.2 — the spec, CLI, and registry are implemented and tested. The
 > `coven` core integration (reading `capabilities` instead of hardcoded
 > `harness_id == "claude"` checks) is a coordinated follow-up PR; see
 > [`docs/integration.md`](docs/integration.md).
@@ -134,7 +134,7 @@ let entry = RegistryIndex::canonical().resolve_latest("hermes")?;
 
 ```sh
 # Any language: pinned by release tag + checksum.
-curl -fsSLO "https://github.com/OpenCoven/coven-runtimes/releases/download/v0.1.0/registry-index.json"
+curl -fsSLO "https://github.com/OpenCoven/coven-runtimes/releases/download/v0.2.0/registry-index.json"
 ```
 
 Full recipes (pinning, checksum verification, resolution) are in

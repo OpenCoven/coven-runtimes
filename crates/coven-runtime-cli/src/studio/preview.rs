@@ -176,6 +176,9 @@ pub(crate) fn launch_preview(adapter: &RuntimeAdapter) -> Vec<PreviewLine> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
     use super::*;
     use coven_runtime_registry::RegistryIndex;
     use coven_runtime_spec::{AdapterManifest, Capabilities, ModelIdTransform, SandboxMapping};
@@ -211,6 +214,27 @@ mod tests {
             .to_json_pretty()
             .expect("serialize canonical one-adapter manifest")
         )
+    }
+
+    /// Cargo adds `.cargo_vcs_info.json` to a published crate archive. Only
+    /// that explicit marker suppresses the repository drift guard: a source
+    /// checkout always returns its expected examples path, so deleted fixtures
+    /// fail instead of silently looking like a package test.
+    fn repo_examples_dir(manifest_dir: &Path) -> Option<PathBuf> {
+        (!manifest_dir.join(".cargo_vcs_info.json").is_file())
+            .then_some(manifest_dir.join("../../examples"))
+    }
+
+    #[test]
+    fn repo_examples_dir_uses_the_published_archive_marker() {
+        let dir = tempfile::tempdir().expect("temporary crate directory");
+        assert_eq!(
+            repo_examples_dir(dir.path()),
+            Some(dir.path().join("../../examples"))
+        );
+
+        fs::write(dir.path().join(".cargo_vcs_info.json"), "{}").expect("write package marker");
+        assert_eq!(repo_examples_dir(dir.path()), None);
     }
 
     /// Claude shape: positional prompt, flag-form sandbox, stream mode.
@@ -458,13 +482,15 @@ mod tests {
 
     #[test]
     fn latest_examples_match_canonical_one_adapter_manifests_byte_for_byte() {
-        for (id, example) in [
-            ("hermes", include_str!("../../../../examples/hermes.json")),
-            (
-                "opencode",
-                include_str!("../../../../examples/opencode.json"),
-            ),
-        ] {
+        let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let Some(examples_dir) = repo_examples_dir(manifest_dir) else {
+            eprintln!("skipping repository drift guard in a published crate archive");
+            return;
+        };
+        for id in ["hermes", "opencode"] {
+            let path = examples_dir.join(format!("{id}.json"));
+            let example = fs::read_to_string(&path)
+                .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
             assert_eq!(
                 example,
                 canonical_manifest(canonical_adapter(id)),

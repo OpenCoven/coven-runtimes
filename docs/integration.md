@@ -65,7 +65,7 @@ simply pick up the conservative baseline (all capabilities off).
 
 ## Suggested PR sequence
 
-1. **coven-runtimes** (this repo): publish v0.1. No core impact.
+1. **coven-runtimes** (this repo): publish v0.2. No core impact.
 2. **coven core, PR 1 — adopt the types (no behavior change):** add the
    `coven-runtime-spec` dependency, add `capabilities` to `HarnessCommandSpec`,
    populate built-ins with their real capabilities, and rewrite the
