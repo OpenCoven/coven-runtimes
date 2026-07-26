@@ -60,6 +60,7 @@ cargo build --release           # binary at target/release/conjure
 # Scaffold a new runtime adapter
 conjure new aria                        # minimal one-shot runtime → aria.json
 conjure new zephyr --flavor streaming   # streaming + sandbox → zephyr.json
+conjure new nyx --flavor continuity     # one-shot + session init/resume → nyx.json
 
 # Validate against the shared spec
 conjure validate aria.json --verbose

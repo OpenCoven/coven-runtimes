@@ -9,6 +9,9 @@ pub enum Flavor {
     Minimal,
     /// A streaming, session-resumable runtime with sandbox mapping. Matches Claude.
     Streaming,
+    /// A one-shot runtime with native session continuity (pre-assigned ids,
+    /// cold-start resume) but no stream mode. Matches Grok Build.
+    Continuity,
 }
 
 impl Flavor {
@@ -16,8 +19,9 @@ impl Flavor {
         match s.trim().to_ascii_lowercase().as_str() {
             "minimal" | "basic" | "oneshot" => Ok(Flavor::Minimal),
             "streaming" | "stream" | "full" => Ok(Flavor::Streaming),
+            "continuity" | "session" | "resume" => Ok(Flavor::Continuity),
             other => Err(format!(
-                "unknown flavor `{other}`; expected `minimal` or `streaming`"
+                "unknown flavor `{other}`; expected `minimal`, `streaming` or `continuity`"
             )),
         }
     }
@@ -87,6 +91,40 @@ pub fn scaffold(id: &str, flavor: Flavor) -> AdapterManifest {
             homepage: None,
             description: Some(format!("{id} streaming runtime adapter for Coven.")),
         },
+        // The Grok Build shape: every turn is a fresh process, but the runtime
+        // pre-assigns session ids and resumes them via its own CLI flags.
+        Flavor::Continuity => RuntimeAdapter {
+            id: id.to_string(),
+            label,
+            executable: id.to_string(),
+            interactive_prompt_prefix_args: vec![],
+            non_interactive_prompt_prefix_args: vec!["run".into()],
+            install_hint: format!("Install {id}, add it to PATH, then complete its setup."),
+            system_prompt_flag: None,
+            model_flag: Some("--model".into()),
+            model_arg_template: None,
+            capabilities: Capabilities {
+                stream: false,
+                preassigned_session_id: true,
+                think: false,
+                speed: false,
+            },
+            sandbox: None,
+            stream_args: None,
+            continuity_args: Some(coven_runtime_spec::ContinuityArgs {
+                init_prefix_args: vec!["run".into()],
+                resume_prefix_args: vec!["run".into()],
+                session_id_flag: Some("--session-id".into()),
+                resume_flag: Some("--resume".into()),
+            }),
+            prompt_flag: None,
+            interactive_prompt_flag: None,
+            version: Some("0.1.0".into()),
+            homepage: None,
+            description: Some(format!(
+                "{id} session-continuity runtime adapter for Coven."
+            )),
+        },
     };
     AdapterManifest {
         adapters: vec![adapter],
@@ -117,6 +155,8 @@ mod tests {
     fn flavor_parses_aliases() {
         assert_eq!(Flavor::parse("minimal").unwrap(), Flavor::Minimal);
         assert_eq!(Flavor::parse("STREAM").unwrap(), Flavor::Streaming);
+        assert_eq!(Flavor::parse("continuity").unwrap(), Flavor::Continuity);
+        assert_eq!(Flavor::parse("session").unwrap(), Flavor::Continuity);
         assert!(Flavor::parse("bogus").is_err());
     }
 
@@ -144,5 +184,19 @@ mod tests {
         assert!(errs.is_empty(), "{errs:?}");
         assert!(m.adapters[0].capabilities.stream);
         assert!(m.adapters[0].supports_permission());
+    }
+
+    #[test]
+    fn continuity_scaffold_validates_clean() {
+        let m = scaffold("aria", Flavor::Continuity);
+        let errs = validate_manifest(&m);
+        assert!(errs.is_empty(), "{errs:?}");
+        let adapter = &m.adapters[0];
+        assert!(!adapter.capabilities.stream);
+        assert!(adapter.capabilities.preassigned_session_id);
+        let continuity = adapter.continuity_args.as_ref().unwrap();
+        assert!(continuity.has_init_launch());
+        assert!(continuity.has_resume_launch());
+        assert_eq!(continuity.session_id_flag(), Some("--session-id"));
     }
 }

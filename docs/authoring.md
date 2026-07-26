@@ -53,6 +53,7 @@ Pick the flavor that matches what you learned:
 ```sh
 conjure new aria                        # minimal: plain one-shot runtime
 conjure new zephyr --flavor streaming   # streaming + sandbox skeleton
+conjure new nyx --flavor continuity     # one-shot + native session init/resume
 ```
 
 ```
@@ -62,7 +63,9 @@ Next: edit it, then `conjure validate aria.json`.
 
 The minimal scaffold is a complete, already-valid manifest with every
 capability `false` — the conservative baseline. You only *add* claims you can
-prove.
+prove. The continuity flavor starts from the Grok Build shape: every turn is a
+fresh process, but the runtime pre-assigns session ids (`--session-id`) and
+resumes them (`--resume`) through `continuity_args`.
 
 ## 3. Fill in the manifest
 
