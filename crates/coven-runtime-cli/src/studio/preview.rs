@@ -153,7 +153,7 @@ pub(crate) fn launch_preview(adapter: &RuntimeAdapter) -> Vec<PreviewLine> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use coven_runtime_spec::{AdapterManifest, Capabilities, SandboxMapping};
+    use coven_runtime_spec::{AdapterManifest, Capabilities, ModelIdTransform, SandboxMapping};
 
     fn adapter(raw: &str) -> RuntimeAdapter {
         AdapterManifest::from_json(raw)
@@ -261,6 +261,7 @@ mod tests {
             system_prompt_flag: None,
             model_flag: None,
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities::BASELINE,
             sandbox: None,
             stream_args: None,
@@ -286,6 +287,7 @@ mod tests {
         let a = RuntimeAdapter {
             model_flag: Some("--model".into()),
             model_arg_template: Some("-c model={model}".into()),
+            model_id_transform: ModelIdTransform::StripProvider,
             ..adapter(
                 r#"{ "adapters": [{ "id": "x", "label": "X", "executable": "x", "install_hint": "h" }]}"#,
             )

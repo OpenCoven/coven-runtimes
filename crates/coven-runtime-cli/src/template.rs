@@ -1,6 +1,6 @@
 //! Manifest scaffolding templates for `conjure new`.
 
-use coven_runtime_spec::{AdapterManifest, Capabilities, RuntimeAdapter};
+use coven_runtime_spec::{AdapterManifest, Capabilities, ModelIdTransform, RuntimeAdapter};
 
 /// Which starting point to scaffold.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +43,7 @@ pub fn scaffold(id: &str, flavor: Flavor) -> AdapterManifest {
             system_prompt_flag: None,
             model_flag: Some("--model".into()),
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities::BASELINE,
             sandbox: None,
             stream_args: None,
@@ -63,6 +64,7 @@ pub fn scaffold(id: &str, flavor: Flavor) -> AdapterManifest {
             system_prompt_flag: Some("--system-prompt".into()),
             model_flag: Some("--model".into()),
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities {
                 stream: true,
                 preassigned_session_id: true,
@@ -107,6 +109,7 @@ pub fn scaffold(id: &str, flavor: Flavor) -> AdapterManifest {
             system_prompt_flag: None,
             model_flag: Some("--model".into()),
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities {
                 stream: false,
                 preassigned_session_id: true,

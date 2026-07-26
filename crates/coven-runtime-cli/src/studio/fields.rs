@@ -560,7 +560,7 @@ pub(crate) fn visible_fields(adapter: &RuntimeAdapter) -> Vec<&'static FieldSpec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use coven_runtime_spec::Capabilities;
+    use coven_runtime_spec::{Capabilities, ModelIdTransform};
 
     fn full_adapter() -> RuntimeAdapter {
         RuntimeAdapter {
@@ -575,6 +575,7 @@ mod tests {
             system_prompt_flag: Some("--rules".into()),
             model_flag: Some("--model".into()),
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities {
                 stream: false,
                 preassigned_session_id: true,

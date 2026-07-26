@@ -8,7 +8,8 @@
 use std::path::PathBuf;
 
 use coven_runtime_spec::{
-    AdapterManifest, Capabilities, ContinuityArgs, RuntimeAdapter, SandboxMapping, StreamArgs,
+    AdapterManifest, Capabilities, ContinuityArgs, ModelIdTransform, RuntimeAdapter,
+    SandboxMapping, StreamArgs,
 };
 use serde_json::Value;
 
@@ -144,6 +145,7 @@ fn schema_accepts_serialized_runtime_adapter() {
         system_prompt_flag: Some("--system-prompt".into()),
         model_flag: Some("--model".into()),
         model_arg_template: None,
+        model_id_transform: ModelIdTransform::StripProvider,
         capabilities: Capabilities {
             stream: true,
             preassigned_session_id: true,
@@ -189,6 +191,7 @@ fn schema_accepts_args_form_sandbox_adapter() {
         system_prompt_flag: None,
         model_flag: Some("--model".into()),
         model_arg_template: None,
+        model_id_transform: ModelIdTransform::StripProvider,
         capabilities: Capabilities {
             stream: true,
             preassigned_session_id: true,
@@ -258,6 +261,7 @@ fn schema_accepts_one_shot_headless_adapter() {
         system_prompt_flag: Some("--rules".into()),
         model_flag: Some("--model".into()),
         model_arg_template: None,
+        model_id_transform: ModelIdTransform::StripProvider,
         capabilities: Capabilities {
             stream: false,
             preassigned_session_id: true,
@@ -322,6 +326,7 @@ fn schema_accepts_baseline_adapter() {
             system_prompt_flag: None,
             model_flag: None,
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities::BASELINE,
             sandbox: None,
             stream_args: None,

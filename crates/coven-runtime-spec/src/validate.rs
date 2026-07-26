@@ -517,7 +517,7 @@ pub fn parse_registry_version(value: &str) -> Option<(u64, u64, u64)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manifest::{ContinuityArgs, StreamArgs};
+    use crate::manifest::{ContinuityArgs, ModelIdTransform, StreamArgs};
     use crate::sandbox::SandboxMapping;
 
     fn base_adapter(id: &str) -> RuntimeAdapter {
@@ -533,6 +533,7 @@ mod tests {
             system_prompt_flag: None,
             model_flag: None,
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities::BASELINE,
             sandbox: None,
             stream_args: None,

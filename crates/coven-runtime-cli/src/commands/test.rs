@@ -281,7 +281,7 @@ fn long_flags(args: &[String]) -> impl Iterator<Item = &str> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use coven_runtime_spec::{Capabilities, SandboxMapping};
+    use coven_runtime_spec::{Capabilities, ModelIdTransform, SandboxMapping};
 
     fn adapter(exe: &str) -> RuntimeAdapter {
         RuntimeAdapter {
@@ -294,6 +294,7 @@ mod tests {
             system_prompt_flag: None,
             model_flag: Some("--model".into()),
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities::BASELINE,
             sandbox: Some(SandboxMapping::Flag {
                 flag: "--sandbox".into(),

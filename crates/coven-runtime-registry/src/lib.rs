@@ -279,7 +279,7 @@ impl SemVer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use coven_runtime_spec::Capabilities;
+    use coven_runtime_spec::{Capabilities, ModelIdTransform};
 
     fn adapter(id: &str) -> RuntimeAdapter {
         RuntimeAdapter {
@@ -292,6 +292,7 @@ mod tests {
             system_prompt_flag: None,
             model_flag: None,
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities::BASELINE,
             sandbox: None,
             stream_args: None,
