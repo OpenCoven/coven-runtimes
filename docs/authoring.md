@@ -63,9 +63,11 @@ Next: edit it, then `conjure validate aria.json`.
 
 The minimal scaffold is a complete, already-valid manifest with every
 capability `false` — the conservative baseline. You only *add* claims you can
-prove. The continuity flavor starts from the Grok Build shape: every turn is a
-fresh process, but the runtime pre-assigns session ids (`--session-id`) and
-resumes them (`--resume`) through `continuity_args`.
+prove. The continuity flavor is inspired by the Grok Build pattern: every turn
+is a fresh process, but the runtime pre-assigns session ids (`--session-id`)
+and resumes them (`--resume`) through `continuity_args`. Its args are generic
+placeholders — replace them with your runtime's real flags (see
+[grok.json](../examples/grok.json) for a filled-in example).
 
 ## 3. Fill in the manifest
 

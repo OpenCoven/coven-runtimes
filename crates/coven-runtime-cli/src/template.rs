@@ -10,7 +10,9 @@ pub enum Flavor {
     /// A streaming, session-resumable runtime with sandbox mapping. Matches Claude.
     Streaming,
     /// A one-shot runtime with native session continuity (pre-assigned ids,
-    /// cold-start resume) but no stream mode. Matches Grok Build.
+    /// cold-start resume) but no stream mode — the pattern Grok Build landed
+    /// with. The scaffold is a generic starting point, not a copy of any
+    /// specific adapter.
     Continuity,
 }
 
@@ -91,8 +93,10 @@ pub fn scaffold(id: &str, flavor: Flavor) -> AdapterManifest {
             homepage: None,
             description: Some(format!("{id} streaming runtime adapter for Coven.")),
         },
-        // The Grok Build shape: every turn is a fresh process, but the runtime
+        // The session-continuity pattern (Grok Build is the registry's
+        // canonical example): every turn is a fresh process, but the runtime
         // pre-assigns session ids and resumes them via its own CLI flags.
+        // Generic placeholders — swap in the runtime's real args.
         Flavor::Continuity => RuntimeAdapter {
             id: id.to_string(),
             label,
