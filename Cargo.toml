@@ -11,7 +11,7 @@ edition = "2021"
 license = "MIT"
 authors = ["Valentina Alexander"]
 repository = "https://github.com/OpenCoven/coven-runtimes"
-rust-version = "1.82"
+rust-version = "1.88"
 
 [workspace.dependencies]
 anyhow = "1"
