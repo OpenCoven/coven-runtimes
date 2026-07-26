@@ -43,9 +43,6 @@ trait WindowsApi: Send + Sync {
 
 struct SystemWindowsApi;
 
-#[cfg(test)]
-static LIVE_OWNED_HANDLES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
-
 /// Owns a valid Win32 handle from the instant an allocating API returns it.
 struct OwnedHandle {
     raw: HANDLE,
@@ -57,8 +54,6 @@ impl OwnedHandle {
         if handle.is_null() {
             Err(Error::last_os_error())
         } else {
-            #[cfg(test)]
-            LIVE_OWNED_HANDLES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(Self { raw: handle, api })
         }
     }
@@ -67,8 +62,6 @@ impl OwnedHandle {
         if handle == INVALID_HANDLE_VALUE {
             Err(Error::last_os_error())
         } else {
-            #[cfg(test)]
-            LIVE_OWNED_HANDLES.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             Ok(Self { raw: handle, api })
         }
     }
@@ -81,8 +74,6 @@ impl OwnedHandle {
 impl Drop for OwnedHandle {
     fn drop(&mut self) {
         self.api.close_handle(self.raw);
-        #[cfg(test)]
-        LIVE_OWNED_HANDLES.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -422,6 +413,55 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct TrackingSystemWindowsApi {
+        jobs_created: AtomicUsize,
+        handles_closed: AtomicUsize,
+    }
+
+    impl TrackingSystemWindowsApi {
+        fn live_jobs(&self) -> usize {
+            self.jobs_created.load(Ordering::SeqCst) - self.handles_closed.load(Ordering::SeqCst)
+        }
+    }
+
+    impl WindowsApi for TrackingSystemWindowsApi {
+        fn create_job(&self) -> io::Result<HANDLE> {
+            let handle = SystemWindowsApi.create_job()?;
+            self.jobs_created.fetch_add(1, Ordering::SeqCst);
+            Ok(handle)
+        }
+
+        fn configure_kill_on_close(&self, job: HANDLE) -> io::Result<()> {
+            SystemWindowsApi.configure_kill_on_close(job)
+        }
+
+        fn close_handle(&self, handle: HANDLE) {
+            SystemWindowsApi.close_handle(handle);
+            self.handles_closed.fetch_add(1, Ordering::SeqCst);
+        }
+
+        fn assign_process(&self, job: HANDLE, process: HANDLE) -> io::Result<()> {
+            SystemWindowsApi.assign_process(job, process)
+        }
+
+        fn resume_process(&self, process: HANDLE) -> io::Result<()> {
+            SystemWindowsApi.resume_process(process)
+        }
+
+        fn terminate_job(&self, job: HANDLE) -> io::Result<()> {
+            SystemWindowsApi.terminate_job(job)
+        }
+
+        fn active_processes(&self, job: HANDLE) -> io::Result<DWORD> {
+            SystemWindowsApi.active_processes(job)
+        }
+
+        fn terminate_leader(&self, child: &mut Child) -> io::Result<()> {
+            SystemWindowsApi.terminate_leader(child)
+        }
+    }
+
     impl WindowsApi for MockWindowsApi {
         fn create_job(&self) -> io::Result<HANDLE> {
             self.state.jobs_created.fetch_add(1, Ordering::SeqCst);
@@ -497,20 +537,55 @@ mod tests {
     }
 
     #[test]
-    fn system_missing_executable_restores_real_handle_baseline() {
+    fn system_missing_executable_closes_its_job_handle() {
         let _serial = WINDOWS_PROBE_TESTS
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let handle_baseline = LIVE_OWNED_HANDLES.load(Ordering::SeqCst);
+        let tracking = Arc::new(TrackingSystemWindowsApi::default());
+        let api: Arc<dyn WindowsApi> = tracking.clone();
         let mut command = Command::new("definitely-not-a-windows-executable-xyzzy.exe");
 
-        let result = ProbeChild::spawn(&mut command);
+        let result = ProbeChild::spawn_with_api(&mut command, api);
         assert!(matches!(result, Err(SpawnProbeError::BeforeSpawn(_))));
+        assert_eq!(tracking.jobs_created.load(Ordering::SeqCst), 1);
+        assert_eq!(tracking.handles_closed.load(Ordering::SeqCst), 1);
+        assert_eq!(tracking.live_jobs(), 0);
+    }
+
+    #[test]
+    fn process_wide_baseline_misattributes_an_unrelated_live_job() {
+        let _serial = WINDOWS_PROBE_TESTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let subject = Arc::new(TrackingSystemWindowsApi::default());
+        let unrelated = Arc::new(TrackingSystemWindowsApi::default());
+        let process_wide_baseline = subject.live_jobs() + unrelated.live_jobs();
+
+        let unrelated_api: Arc<dyn WindowsApi> = unrelated.clone();
+        // Holding this unrelated Job open models a concurrently running probe
+        // test. A process-wide counter cannot distinguish its handle from the
+        // subject operation's handle.
+        let unrelated_job =
+            create_kill_on_close_job(unrelated_api).expect("create unrelated Job Object");
+
+        let subject_api: Arc<dyn WindowsApi> = subject.clone();
+        let mut command = Command::new("definitely-not-a-windows-executable-xyzzy.exe");
+        let result = ProbeChild::spawn_with_api(&mut command, subject_api);
+        assert!(matches!(result, Err(SpawnProbeError::BeforeSpawn(_))));
+
         assert_eq!(
-            LIVE_OWNED_HANDLES.load(Ordering::SeqCst),
-            handle_baseline,
-            "real missing-executable path leaked its preallocated Job handle"
+            subject.live_jobs(),
+            0,
+            "the subject operation did not close its own Job handle"
         );
+        assert_eq!(
+            subject.live_jobs() + unrelated.live_jobs(),
+            process_wide_baseline + 1,
+            "the unrelated concurrent Job should perturb a process-wide baseline"
+        );
+
+        drop(unrelated_job);
+        assert_eq!(unrelated.live_jobs(), 0);
     }
 
     #[test]
@@ -586,7 +661,8 @@ mod tests {
         let _serial = WINDOWS_PROBE_TESTS
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let handle_baseline = LIVE_OWNED_HANDLES.load(Ordering::SeqCst);
+        let tracking = Arc::new(TrackingSystemWindowsApi::default());
+        let api: Arc<dyn WindowsApi> = tracking.clone();
         let dir = tempfile::tempdir().expect("create marker directory");
         let started = dir.path().join("started");
         let survived = dir.path().join("survived");
@@ -599,7 +675,7 @@ mod tests {
             .args(["--exact", &helper, "--ignored", "--nocapture"])
             .env("CONJURE_WINDOWS_STARTED", &started)
             .env("CONJURE_WINDOWS_SURVIVED", &survived);
-        let child = match ProbeChild::spawn(&mut command) {
+        let child = match ProbeChild::spawn_with_api(&mut command, api) {
             Ok(child) => child,
             Err(SpawnProbeError::BeforeSpawn(error)) => panic!("spawn helper: {error}"),
             Err(SpawnProbeError::PostSpawn { error, .. }) => {
@@ -611,24 +687,16 @@ mod tests {
             thread::sleep(Duration::from_millis(10));
         }
         assert!(started.exists(), "helper never reached its running state");
-        assert_eq!(
-            LIVE_OWNED_HANDLES.load(Ordering::SeqCst),
-            handle_baseline + 1,
-            "real spawn leaked transient snapshot/thread handles or lost its Job handle"
-        );
+        assert_eq!(tracking.jobs_created.load(Ordering::SeqCst), 1);
+        assert_eq!(tracking.handles_closed.load(Ordering::SeqCst), 0);
 
         drop(child);
         let handles_closed_deadline = Instant::now() + Duration::from_secs(1);
-        while LIVE_OWNED_HANDLES.load(Ordering::SeqCst) != handle_baseline
-            && Instant::now() < handles_closed_deadline
-        {
+        while tracking.live_jobs() != 0 && Instant::now() < handles_closed_deadline {
             thread::sleep(Duration::from_millis(10));
         }
-        assert_eq!(
-            LIVE_OWNED_HANDLES.load(Ordering::SeqCst),
-            handle_baseline,
-            "real ProbeChild drop did not close every owned Win32 handle"
-        );
+        assert_eq!(tracking.handles_closed.load(Ordering::SeqCst), 1);
+        assert_eq!(tracking.live_jobs(), 0);
         thread::sleep(Duration::from_millis(1_200));
         assert!(
             !survived.exists(),
