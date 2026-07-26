@@ -35,10 +35,10 @@ save. If it does exist, it is loaded with the same strict parser as
 ```
 
 - **Manifest form** (left) — every manifest field as a row, grouped into the
-  sections the docs use: Identity, Launch, Capabilities, Sandbox, Streaming,
-  Continuity. Rows with validation problems are marked `✗` in red. The sandbox
-  and streaming/continuity rows appear and disappear as the relevant selector
-  changes — you can't edit a field the current shape doesn't have.
+  sections the UI uses: Identity, Launch, Prompt binding, Model, Capabilities,
+  Sandbox, Stream args, and Continuity args. Rows with validation problems are
+  marked `✗` in red. Sandbox detail rows follow the selected mapping shape, so
+  you can't edit a field the current shape doesn't have.
 - **Validation** (top right) — the full `conjure validate` rule set re-run on
   every change (it's the same pure `validate_manifest` the CLI and CI use).
   Problems caused by the focused field are highlighted. The panel title shows
@@ -46,8 +46,8 @@ save. If it does exist, it is loaded with the same strict parser as
 - **Launch preview** (middle right) — the argv Coven would compose for each
   mode the manifest claims: one-shot, interactive, sandboxed (full and
   read-only), streaming, and continuity init/resume. Placeholders like
-  `<prompt>` and `<session-id>` stand in for runtime values. Illustrative, not
-  executed.
+  `<prompt>`, `<model-without-provider>`, `<provider/model>`, and `<session-id>`
+  stand in for runtime values. Illustrative, not executed.
 - **Conformance probe** (bottom right) — press `t` to run the same binary
   probe as `conjure test`: PATH lookup, a `--version`/`--help` call, and soft
   checks that declared flags appear in the help output.
@@ -58,8 +58,8 @@ save. If it does exist, it is loaded with the same strict parser as
 |-----|--------|
 | `↑`/`↓` or `k`/`j` | move between fields |
 | `Tab` / `Shift-Tab` | jump to next / previous section |
-| `Enter` or `i` | edit the focused field (or toggle a checkbox) |
-| `Space` | toggle a boolean / cycle the sandbox mapping kind |
+| `Enter` or `i` | edit text/args, toggle booleans, or cycle selectors |
+| `Space` | toggle a boolean / cycle the sandbox kind or `model_id_transform` |
 | `Enter` / `Esc` (while editing) | commit / cancel the edit |
 | `[` / `]` | previous / next adapter in a multi-adapter manifest |
 | `s` | save (canonical pretty JSON, identical to `conjure new` output) |
@@ -77,6 +77,9 @@ save. If it does exist, it is loaded with the same strict parser as
   block, exactly like a scaffold that never had it.
 - **The sandbox selector cycles `none → flag → args`** and resets the
   mapping's values on each change, because the two shapes share no fields.
+- **`model_id_transform` is a selector, not free text.** Space or Enter cycles
+  `strip_provider ↔ preserve`; `preserve` is valid only when `model_flag` or
+  `model_arg_template` declares model selection.
 - **Saving with problems is allowed** (you'll get a status warning) so you can
   checkpoint work in progress — but `conjure validate` still gates the PR.
 

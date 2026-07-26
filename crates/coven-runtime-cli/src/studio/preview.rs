@@ -1,5 +1,5 @@
 //! The launch preview: the concrete argv lines Coven would compose from the
-//! adapter's declarations, with `<prompt>`, `<model>`, `<system>`, and
+//! adapter's declarations, with `<prompt>`, model-id, `<system>`, and
 //! `<session-id>` placeholders.
 //!
 //! The preview is **illustrative** — exact composition order lives in coven
@@ -7,7 +7,7 @@
 //! flag or a misplaced prefix arg is visible the moment it's typed. The prompt
 //! is always the last token, matching the documented contract.
 
-use coven_runtime_spec::{Permission, RuntimeAdapter};
+use coven_runtime_spec::{ModelIdTransform, Permission, RuntimeAdapter};
 
 /// One preview line: a launch-mode label and its argv.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -25,13 +25,24 @@ impl PreviewLine {
 /// Model-selection tokens: template form wins over the simple flag, matching
 /// the spec's precedence.
 fn model_tokens(adapter: &RuntimeAdapter) -> Vec<String> {
+    let placeholder = model_placeholder(adapter);
     if let Some(template) = &adapter.model_arg_template {
-        return template.split_whitespace().map(str::to_string).collect();
+        return template
+            .split_whitespace()
+            .map(|token| token.replace("{model}", placeholder))
+            .collect();
     }
     if let Some(flag) = &adapter.model_flag {
-        return vec![flag.clone(), "<model>".into()];
+        return vec![flag.clone(), placeholder.into()];
     }
     Vec::new()
+}
+
+fn model_placeholder(adapter: &RuntimeAdapter) -> &'static str {
+    match adapter.model_id_transform {
+        ModelIdTransform::StripProvider => "<model-without-provider>",
+        ModelIdTransform::Preserve => "<provider/model>",
+    }
 }
 
 fn system_tokens(adapter: &RuntimeAdapter) -> Vec<String> {
@@ -41,23 +52,27 @@ fn system_tokens(adapter: &RuntimeAdapter) -> Vec<String> {
     }
 }
 
-/// The one-shot prompt binding: `--flag "<prompt>"` or a positional.
+/// The one-shot prompt binding: `--flag="<prompt>"` or a positional.
 fn prompt_tokens(flag: Option<&str>) -> Vec<String> {
     match flag {
-        Some(flag) => vec![flag.to_string(), "\"<prompt>\"".into()],
-        None => vec!["\"<prompt>\"".into()],
+        Some(flag) => vec![format!("{flag}=\"<prompt>\"")],
+        None => vec!["--".into(), "\"<prompt>\"".into()],
     }
 }
 
 fn line(
     label: &'static str,
     adapter: &RuntimeAdapter,
-    parts: impl IntoIterator<Item = Vec<String>>,
+    sandbox_tokens: Vec<String>,
+    mode_tokens: Vec<String>,
+    prompt_tokens: Vec<String>,
 ) -> PreviewLine {
     let mut argv = vec![adapter.executable.clone()];
-    for part in parts {
-        argv.extend(part);
-    }
+    argv.extend(model_tokens(adapter));
+    argv.extend(sandbox_tokens);
+    argv.extend(system_tokens(adapter));
+    argv.extend(mode_tokens);
+    argv.extend(prompt_tokens);
     PreviewLine { label, argv }
 }
 
@@ -68,83 +83,92 @@ pub(crate) fn launch_preview(adapter: &RuntimeAdapter) -> Vec<PreviewLine> {
     lines.push(line(
         "one-shot",
         adapter,
-        [
-            adapter.non_interactive_prompt_prefix_args.clone(),
-            model_tokens(adapter),
-            system_tokens(adapter),
-            prompt_tokens(adapter.prompt_flag.as_deref()),
-        ],
+        Vec::new(),
+        adapter.non_interactive_prompt_prefix_args.clone(),
+        prompt_tokens(adapter.prompt_flag.as_deref()),
     ));
 
     lines.push(line(
         "interactive",
         adapter,
-        [
-            adapter.interactive_prompt_prefix_args.clone(),
-            model_tokens(adapter),
-            system_tokens(adapter),
-            prompt_tokens(
-                adapter
-                    .interactive_prompt_flag
-                    .as_deref()
-                    .or(adapter.prompt_flag.as_deref()),
-            ),
-        ],
+        Vec::new(),
+        adapter.interactive_prompt_prefix_args.clone(),
+        prompt_tokens(
+            adapter
+                .interactive_prompt_flag
+                .as_deref()
+                .or(adapter.prompt_flag.as_deref()),
+        ),
     ));
 
     if let Some(sandbox) = &adapter.sandbox {
         lines.push(line(
             "sandbox full",
             adapter,
-            [
-                adapter.non_interactive_prompt_prefix_args.clone(),
-                sandbox.args(Permission::Full),
-                prompt_tokens(adapter.prompt_flag.as_deref()),
-            ],
+            sandbox.args(Permission::Full),
+            adapter.non_interactive_prompt_prefix_args.clone(),
+            prompt_tokens(adapter.prompt_flag.as_deref()),
         ));
         lines.push(line(
             "sandbox read-only",
             adapter,
-            [
-                adapter.non_interactive_prompt_prefix_args.clone(),
-                sandbox.args(Permission::ReadOnly),
-                prompt_tokens(adapter.prompt_flag.as_deref()),
-            ],
+            sandbox.args(Permission::ReadOnly),
+            adapter.non_interactive_prompt_prefix_args.clone(),
+            prompt_tokens(adapter.prompt_flag.as_deref()),
         ));
     }
 
     if let Some(stream) = &adapter.stream_args {
-        let mut launch = vec![stream.prefix_args.clone()];
+        let mut launch = stream.prefix_args.clone();
         if let Some(flag) = &stream.session_id_flag {
-            launch.push(vec![flag.clone(), "<session-id>".into()]);
+            launch.extend([flag.clone(), "<session-id>".into()]);
         }
-        lines.push(line("stream", adapter, launch));
+        lines.push(line("stream", adapter, Vec::new(), launch, Vec::new()));
         if let Some(flag) = &stream.resume_flag {
             lines.push(line(
                 "stream resume",
                 adapter,
-                [
-                    stream.prefix_args.clone(),
-                    vec![flag.clone(), "<session-id>".into()],
-                ],
+                Vec::new(),
+                stream
+                    .prefix_args
+                    .iter()
+                    .cloned()
+                    .chain([flag.clone(), "<session-id>".into()])
+                    .collect(),
+                Vec::new(),
             ));
         }
     }
 
     if let Some(continuity) = &adapter.continuity_args {
-        let mut init = vec![continuity.init_prefix_args.clone()];
-        if let Some(flag) = continuity.session_id_flag() {
-            init.push(vec![flag.to_string(), "<session-id>".into()]);
+        if continuity.has_init_launch() {
+            let mut init = continuity.init_prefix_args.clone();
+            if let Some(flag) = continuity.session_id_flag() {
+                init.extend([flag.to_string(), "<session-id>".into()]);
+            }
+            lines.push(line(
+                "continuity init",
+                adapter,
+                Vec::new(),
+                init,
+                prompt_tokens(adapter.prompt_flag.as_deref()),
+            ));
         }
-        init.push(prompt_tokens(adapter.prompt_flag.as_deref()));
-        lines.push(line("continuity init", adapter, init));
 
-        let mut resume = vec![continuity.resume_prefix_args.clone()];
-        if let Some(flag) = continuity.resume_flag() {
-            resume.push(vec![flag.to_string(), "<session-id>".into()]);
+        if continuity.has_resume_launch() {
+            let mut resume = continuity.resume_prefix_args.clone();
+            if let Some(flag) = continuity.resume_flag() {
+                resume.push(flag.to_string());
+            }
+            resume.push("<session-id>".into());
+            lines.push(line(
+                "continuity resume",
+                adapter,
+                Vec::new(),
+                resume,
+                prompt_tokens(adapter.prompt_flag.as_deref()),
+            ));
         }
-        resume.push(prompt_tokens(adapter.prompt_flag.as_deref()));
-        lines.push(line("continuity resume", adapter, resume));
     }
 
     lines
@@ -188,19 +212,27 @@ mod tests {
 
         assert_eq!(
             find(&lines, "one-shot").command(),
-            r#"claude --print --model <model> --system-prompt "<system>" "<prompt>""#
+            r#"claude --model <model-without-provider> --system-prompt "<system>" --print -- "<prompt>""#
+        );
+        assert_eq!(
+            find(&lines, "interactive").command(),
+            r#"claude --model <model-without-provider> --system-prompt "<system>" -- "<prompt>""#
         );
         assert_eq!(
             find(&lines, "stream").command(),
-            "claude -p --output-format stream-json --session-id <session-id>"
+            r#"claude --model <model-without-provider> --system-prompt "<system>" -p --output-format stream-json --session-id <session-id>"#
         );
         assert_eq!(
             find(&lines, "stream resume").command(),
-            "claude -p --output-format stream-json --resume <session-id>"
+            r#"claude --model <model-without-provider> --system-prompt "<system>" -p --output-format stream-json --resume <session-id>"#
+        );
+        assert_eq!(
+            find(&lines, "sandbox full").command(),
+            r#"claude --model <model-without-provider> --permission-mode bypassPermissions --system-prompt "<system>" --print -- "<prompt>""#
         );
         assert_eq!(
             find(&lines, "sandbox read-only").command(),
-            r#"claude --print --permission-mode plan "<prompt>""#
+            r#"claude --model <model-without-provider> --permission-mode plan --system-prompt "<system>" --print -- "<prompt>""#
         );
         assert!(lines.iter().all(|l| l.label != "continuity init"));
     }
@@ -214,6 +246,7 @@ mod tests {
                 "non_interactive_prompt_prefix_args": ["--output-format", "plain"],
                 "install_hint": "Install Grok Build.",
                 "prompt_flag": "--single",
+                "system_prompt_flag": "--rules",
                 "model_flag": "--model",
                 "capabilities": { "preassigned_session_id": true },
                 "sandbox": { "full_args": ["--permission-mode", "bypassPermissions"], "read_only_args": ["--sandbox", "read-only"] },
@@ -229,21 +262,72 @@ mod tests {
 
         assert_eq!(
             find(&lines, "one-shot").command(),
-            r#"grok --output-format plain --model <model> --single "<prompt>""#
+            r#"grok --model <model-without-provider> --rules "<system>" --output-format plain --single="<prompt>""#
         );
         assert_eq!(
             find(&lines, "continuity init").command(),
-            r#"grok --output-format plain --session-id <session-id> --single "<prompt>""#
+            r#"grok --model <model-without-provider> --rules "<system>" --output-format plain --session-id <session-id> --single="<prompt>""#
         );
         assert_eq!(
             find(&lines, "continuity resume").command(),
-            r#"grok --output-format plain --resume <session-id> --single "<prompt>""#
+            r#"grok --model <model-without-provider> --rules "<system>" --output-format plain --resume <session-id> --single="<prompt>""#
         );
         assert_eq!(
             find(&lines, "sandbox full").command(),
-            r#"grok --output-format plain --permission-mode bypassPermissions --single "<prompt>""#
+            r#"grok --model <model-without-provider> --permission-mode bypassPermissions --rules "<system>" --output-format plain --single="<prompt>""#
         );
         assert!(lines.iter().all(|l| l.label != "stream"));
+    }
+
+    #[test]
+    fn copilot_shape_preview_uses_single_prompt_tokens() {
+        let a = adapter(
+            r#"{ "adapters": [{
+                "id": "copilot", "label": "GitHub Copilot CLI", "executable": "copilot",
+                "install_hint": "Install GitHub Copilot CLI.",
+                "non_interactive_prompt_prefix_args": ["--no-color"],
+                "prompt_flag": "--prompt",
+                "interactive_prompt_flag": "--interactive",
+                "model_flag": "--model",
+                "sandbox": {
+                    "full_args": ["--allow-all"],
+                    "read_only_args": ["--deny-tool", "write"]
+                }
+            }]}"#,
+        );
+        let lines = launch_preview(&a);
+
+        assert_eq!(
+            find(&lines, "one-shot").argv,
+            [
+                "copilot",
+                "--model",
+                "<model-without-provider>",
+                "--no-color",
+                "--prompt=\"<prompt>\""
+            ]
+        );
+        assert_eq!(
+            find(&lines, "interactive").argv,
+            [
+                "copilot",
+                "--model",
+                "<model-without-provider>",
+                "--interactive=\"<prompt>\""
+            ]
+        );
+        assert_eq!(
+            find(&lines, "sandbox read-only").argv,
+            [
+                "copilot",
+                "--model",
+                "<model-without-provider>",
+                "--deny-tool",
+                "write",
+                "--no-color",
+                "--prompt=\"<prompt>\""
+            ]
+        );
     }
 
     /// Minimal adapter: exactly the one-shot + interactive pair, prompt last.
@@ -272,12 +356,26 @@ mod tests {
         };
         let lines = launch_preview(&a);
         assert_eq!(lines.len(), 2);
-        assert_eq!(lines[0].command(), r#"aria run "<prompt>""#);
-        assert_eq!(lines[1].command(), r#"aria "<prompt>""#);
-        // The prompt is always the final token.
+        assert_eq!(lines[0].command(), r#"aria run -- "<prompt>""#);
+        assert_eq!(lines[1].command(), r#"aria -- "<prompt>""#);
+        // Positional prompt data is always protected by an options terminator.
         for l in &lines {
-            assert_eq!(l.argv.last().unwrap(), "\"<prompt>\"");
+            assert_eq!(&l.argv[l.argv.len() - 2..], ["--", "\"<prompt>\""]);
         }
+    }
+
+    #[test]
+    fn preview_distinguishes_preserved_and_stripped_model_ids() {
+        let mut adapter = adapter(
+            r#"{ "adapters": [{ "id": "x", "label": "X", "executable": "x", "install_hint": "h", "model_flag": "--model" }]}"#,
+        );
+        assert!(launch_preview(&adapter)[0]
+            .command()
+            .contains("<model-without-provider>"));
+        adapter.model_id_transform = ModelIdTransform::Preserve;
+        assert!(launch_preview(&adapter)[0]
+            .command()
+            .contains("<provider/model>"));
     }
 
     /// `model_arg_template` takes precedence over `model_flag`, matching the
@@ -293,7 +391,173 @@ mod tests {
             )
         };
         let one_shot = launch_preview(&a).remove(0);
-        assert_eq!(one_shot.command(), r#"x -c model={model} "<prompt>""#);
+        assert_eq!(
+            one_shot.command(),
+            r#"x -c model=<model-without-provider> -- "<prompt>""#
+        );
+    }
+
+    #[test]
+    fn model_transform_applies_to_template_placeholders() {
+        let mut a = adapter(
+            r#"{ "adapters": [{ "id": "x", "label": "X", "executable": "x", "install_hint": "h", "model_arg_template": "-c model={model}" }]}"#,
+        );
+        assert_eq!(
+            launch_preview(&a)[0].command(),
+            r#"x -c model=<model-without-provider> -- "<prompt>""#
+        );
+
+        a.model_id_transform = ModelIdTransform::Preserve;
+        assert_eq!(
+            launch_preview(&a)[0].command(),
+            r#"x -c model=<provider/model> -- "<prompt>""#
+        );
+    }
+
+    #[test]
+    fn model_transform_applies_to_stream_and_continuity_previews() {
+        let mut a = adapter(
+            r#"{ "adapters": [{
+                "id": "x", "label": "X", "executable": "x", "install_hint": "h",
+                "system_prompt_flag": "--rules",
+                "model_flag": "--ignored",
+                "model_arg_template": "-c model={model}",
+                "prompt_flag": "--single",
+                "capabilities": { "stream": true, "preassigned_session_id": true },
+                "stream_args": {
+                    "prefix_args": ["--stream"],
+                    "session_id_flag": "--session-id",
+                    "resume_flag": "--resume"
+                },
+                "continuity_args": {
+                    "init_prefix_args": ["run"],
+                    "resume_prefix_args": ["run"],
+                    "session_id_flag": "--session-id",
+                    "resume_flag": "--resume"
+                }
+            }]}"#,
+        );
+
+        for (transform, placeholder) in [
+            (ModelIdTransform::StripProvider, "<model-without-provider>"),
+            (ModelIdTransform::Preserve, "<provider/model>"),
+        ] {
+            a.model_id_transform = transform;
+            let lines = launch_preview(&a);
+            for (label, expected) in [
+                (
+                    "stream",
+                    format!(
+                        r#"x -c model={placeholder} --rules "<system>" --stream --session-id <session-id>"#
+                    ),
+                ),
+                (
+                    "stream resume",
+                    format!(
+                        r#"x -c model={placeholder} --rules "<system>" --stream --resume <session-id>"#
+                    ),
+                ),
+                (
+                    "continuity init",
+                    format!(
+                        r#"x -c model={placeholder} --rules "<system>" run --session-id <session-id> --single="<prompt>""#
+                    ),
+                ),
+                (
+                    "continuity resume",
+                    format!(
+                        r#"x -c model={placeholder} --rules "<system>" run --resume <session-id> --single="<prompt>""#
+                    ),
+                ),
+            ] {
+                let command = find(&lines, label).command();
+                assert_eq!(command, expected, "{transform:?} {label}");
+                assert!(!command.contains("--ignored"), "{command}");
+            }
+        }
+    }
+
+    #[test]
+    fn continuity_preview_only_renders_supported_launches() {
+        let init_only = adapter(
+            r#"{ "adapters": [{
+                "id": "x", "label": "X", "executable": "x", "install_hint": "h",
+                "capabilities": { "preassigned_session_id": true },
+                "continuity_args": {
+                    "init_prefix_args": ["start"],
+                    "session_id_flag": "--session-id"
+                }
+            }]}"#,
+        );
+        let continuity = init_only.continuity_args.as_ref().unwrap();
+        assert!(continuity.has_init_launch());
+        assert!(!continuity.has_resume_launch());
+        let lines = launch_preview(&init_only);
+        assert_eq!(
+            find(&lines, "continuity init").command(),
+            r#"x start --session-id <session-id> -- "<prompt>""#
+        );
+        assert!(lines.iter().all(|line| line.label != "continuity resume"));
+
+        let prefix_only_init = adapter(
+            r#"{ "adapters": [{
+                "id": "x", "label": "X", "executable": "x", "install_hint": "h",
+                "continuity_args": { "init_prefix_args": ["start"] }
+            }]}"#,
+        );
+        let continuity = prefix_only_init.continuity_args.as_ref().unwrap();
+        assert!(continuity.has_init_launch());
+        assert!(!continuity.has_resume_launch());
+        let lines = launch_preview(&prefix_only_init);
+        assert_eq!(
+            find(&lines, "continuity init").command(),
+            r#"x start -- "<prompt>""#
+        );
+        assert!(lines.iter().all(|line| line.label != "continuity resume"));
+
+        let positional_resume = adapter(
+            r#"{ "adapters": [{
+                "id": "x", "label": "X", "executable": "x", "install_hint": "h",
+                "continuity_args": { "resume_prefix_args": ["resume"] }
+            }]}"#,
+        );
+        let continuity = positional_resume.continuity_args.as_ref().unwrap();
+        assert!(!continuity.has_init_launch());
+        assert!(continuity.has_resume_launch());
+        let lines = launch_preview(&positional_resume);
+        assert!(lines.iter().all(|line| line.label != "continuity init"));
+        assert_eq!(
+            find(&lines, "continuity resume").command(),
+            r#"x resume <session-id> -- "<prompt>""#
+        );
+
+        let flagged_resume = adapter(
+            r#"{ "adapters": [{
+                "id": "x", "label": "X", "executable": "x", "install_hint": "h",
+                "continuity_args": {
+                    "resume_prefix_args": ["run"],
+                    "resume_flag": "--resume"
+                }
+            }]}"#,
+        );
+        let continuity = flagged_resume.continuity_args.as_ref().unwrap();
+        assert!(!continuity.has_init_launch());
+        assert!(continuity.has_resume_launch());
+        let lines = launch_preview(&flagged_resume);
+        assert!(lines.iter().all(|line| line.label != "continuity init"));
+        assert_eq!(
+            find(&lines, "continuity resume").command(),
+            r#"x run --resume <session-id> -- "<prompt>""#
+        );
+    }
+
+    #[test]
+    fn prompt_flag_renders_one_argv_token() {
+        assert_eq!(
+            prompt_tokens(Some("--single")),
+            vec![r#"--single="<prompt>""#]
+        );
+        assert_eq!(prompt_tokens(None), vec!["--", r#""<prompt>""#]);
     }
 
     /// Interactive prompt binding falls back to `prompt_flag` when
@@ -306,14 +570,14 @@ mod tests {
         let lines = launch_preview(&a);
         assert_eq!(
             find(&lines, "interactive").command(),
-            r#"x --single "<prompt>""#
+            r#"x --single="<prompt>""#
         );
 
         a.interactive_prompt_flag = Some("--interactive".into());
         let lines = launch_preview(&a);
         assert_eq!(
             find(&lines, "interactive").command(),
-            r#"x --interactive "<prompt>""#
+            r#"x --interactive="<prompt>""#
         );
     }
 

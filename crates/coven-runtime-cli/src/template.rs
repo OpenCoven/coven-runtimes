@@ -174,6 +174,17 @@ mod tests {
     }
 
     #[test]
+    fn scaffold_model_transforms_default_to_strip_provider() {
+        for flavor in [Flavor::Minimal, Flavor::Streaming, Flavor::Continuity] {
+            assert_eq!(
+                scaffold("aria", flavor).adapters[0].model_id_transform,
+                ModelIdTransform::StripProvider,
+                "{flavor:?}"
+            );
+        }
+    }
+
+    #[test]
     fn minimal_scaffold_validates_clean() {
         let m = scaffold("aria", Flavor::Minimal);
         assert!(
