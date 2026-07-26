@@ -243,15 +243,7 @@ impl Studio {
                 self.cursor = 0;
             }
             Event::NextAdapter | Event::PrevAdapter => {}
-            Event::Save => {
-                if !self.errors.is_empty() {
-                    self.status = format!(
-                        "saving with {} validation problem(s) — fix before opening a PR",
-                        self.errors.len()
-                    );
-                }
-                return Effect::Save;
-            }
+            Event::Save => return Effect::Save,
             Event::Probe => {
                 self.probe = ProbeState::Running;
                 self.status = format!("probing `{}`…", self.adapter().executable);
@@ -304,12 +296,22 @@ impl Studio {
         }
     }
 
-    /// Feed back the result of an [`Effect::Save`].
+    /// Feed back the result of an [`Effect::Save`]. The final status must be
+    /// composed here — the event loop runs the save and calls this before the
+    /// next frame, so anything `apply` had put in `status` is never rendered.
     pub(crate) fn saved(&mut self, result: Result<(), String>) {
         match result {
             Ok(()) => {
                 self.dirty = false;
-                self.status = format!("saved {}", self.path.display());
+                self.status = if self.errors.is_empty() {
+                    format!("saved {}", self.path.display())
+                } else {
+                    format!(
+                        "saved {} — {} validation problem(s) remain; fix before opening a PR",
+                        self.path.display(),
+                        self.errors.len()
+                    )
+                };
             }
             Err(e) => self.status = format!("save failed: {e}"),
         }
@@ -478,7 +480,21 @@ mod tests {
         }
         s.apply(Event::Commit); // blank id → invalid
         assert_eq!(s.apply(Event::Save), Effect::Save);
-        assert!(s.status.contains("validation problem"));
+        // The event loop saves and reports back before the next frame, so the
+        // rendered status must come out of saved(), not apply().
+        s.saved(Ok(()));
+        assert!(!s.dirty);
+        assert!(s.status.contains("saved"), "{}", s.status);
+        assert!(s.status.contains("1 validation problem"), "{}", s.status);
+    }
+
+    #[test]
+    fn save_clean_reports_plain_saved() {
+        let mut s = studio();
+        assert_eq!(s.apply(Event::Save), Effect::Save);
+        s.saved(Ok(()));
+        assert!(s.status.contains("saved"), "{}", s.status);
+        assert!(!s.status.contains("validation problem"), "{}", s.status);
     }
 
     #[test]
