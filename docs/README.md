@@ -5,6 +5,7 @@ Start from what you're trying to do:
 | I want to… | Read |
 |------------|------|
 | **Add a new runtime** to the Coven, start to finish | [`authoring.md`](authoring.md) — the end-to-end tutorial |
+| Author a manifest **interactively** (live validation + preview) | [`studio.md`](studio.md) — the `conjure studio` TUI |
 | Look up a **manifest field or validation rule** | [`conformance.md`](conformance.md) — the authoritative reference |
 | **Fix an error** from `conjure` or CI | [`troubleshooting.md`](troubleshooting.md) — symptom-indexed |
 | **Consume the accepted runtimes** from another repo | [`adoption.md`](adoption.md) — Rust crate & release-asset recipes |

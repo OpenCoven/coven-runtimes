@@ -62,6 +62,9 @@ conjure new aria                        # minimal one-shot runtime → aria.json
 conjure new zephyr --flavor streaming   # streaming + sandbox → zephyr.json
 conjure new nyx --flavor continuity     # one-shot + session init/resume → nyx.json
 
+# Or author interactively: live validation, launch preview, binary probing (TUI)
+conjure studio aria.json
+
 # Validate against the shared spec
 conjure validate aria.json --verbose
 

@@ -3,6 +3,7 @@
 pub mod new;
 pub mod package;
 pub mod registry;
+pub mod studio;
 pub mod test;
 pub mod validate;
 

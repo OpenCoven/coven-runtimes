@@ -101,6 +101,31 @@ enum ProbeResult {
     NotRunnable(String),
 }
 
+/// Outcome of probing one adapter's binary, in the shape `conjure studio`
+/// renders. A thin owned view over [`ProbeResult`] so the TUI shares the exact
+/// probe (and soft-warning rules) `conjure test` enforces.
+pub(crate) enum ProbeReport {
+    /// Binary resolved and ran; `probe` is the flag that worked.
+    Ok {
+        probe: String,
+        warnings: Vec<String>,
+    },
+    /// Executable not found on PATH.
+    NotFound,
+    /// Found but did not run cleanly within the probe bounds.
+    NotRunnable(String),
+}
+
+/// Probe an adapter's declared executable exactly as `conjure test` does:
+/// bounded `--version` / `--help` invocations plus the soft flag warnings.
+pub(crate) fn probe_adapter_report(adapter: &RuntimeAdapter) -> ProbeReport {
+    match probe_adapter(adapter, None) {
+        ProbeResult::Ok { probe, warnings } => ProbeReport::Ok { probe, warnings },
+        ProbeResult::NotFound => ProbeReport::NotFound,
+        ProbeResult::NotRunnable(msg) => ProbeReport::NotRunnable(msg),
+    }
+}
+
 fn probe_adapter(adapter: &RuntimeAdapter, override_flag: Option<&str>) -> ProbeResult {
     probe_adapter_with_timeout(adapter, override_flag, Duration::from_secs(5))
 }
