@@ -1,0 +1,42 @@
+{
+  "adapters": [
+    {
+      "id": "coven-code",
+      "label": "Coven Code",
+      "executable": "coven-code",
+      "interactive_prompt_prefix_args": [],
+      "non_interactive_prompt_prefix_args": [
+        "--print"
+      ],
+      "install_hint": "npm install -g @opencoven/coven-code (or download a release archive from https://github.com/OpenCoven/coven-code/releases), then ensure `coven-code` is on PATH.",
+      "system_prompt_flag": "--append-system-prompt",
+      "model_flag": "--model",
+      "model_id_transform": "preserve",
+      "capabilities": {
+        "stream": true,
+        "preassigned_session_id": true,
+        "think": true,
+        "speed": true
+      },
+      "sandbox": {
+        "flag": "--permission-mode",
+        "full": "bypass-permissions",
+        "read_only": "plan"
+      },
+      "stream_args": {
+        "prefix_args": [
+          "--print",
+          "--input-format",
+          "stream-json",
+          "--output-format",
+          "stream-json"
+        ],
+        "session_id_flag": "--session-id",
+        "resume_flag": "--resume"
+      },
+      "version": "1.0.2",
+      "homepage": "https://github.com/OpenCoven/coven-code",
+      "description": "Coven Code adapter for one-shot and JSONL streaming sessions with sandbox, think, and speed controls; forwards provider-qualified model IDs unchanged."
+    }
+  ]
+}

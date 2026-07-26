@@ -73,9 +73,13 @@ flag works by hand (`<cmd> --model <m> …`) and note that in your PR.
 
 **The probe hangs**
 
-`conjure test` only ever calls `--version` / `--help` with a bounded wait. If
-that hangs, the runtime is doing something interactive on those flags —
-worth reporting upstream, and worth a note in your PR.
+`conjure test` only runs a read-only help/version invocation with a bounded
+wait. If the non-interactive prefix starts with a bare subcommand, the probe
+uses the model placeholder, only that subcommand, and `--help`; later prefix
+tokens are omitted. Otherwise it uses root `--help`, then `--version`, with no
+model or prefix tokens. If that hangs, the runtime is doing something
+interactive on a help/version path — worth reporting upstream, and worth a
+note in your PR.
 
 ## Registry errors (`conjure registry …`)
 

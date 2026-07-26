@@ -71,7 +71,7 @@ conjure validate aria.json --verbose
 # Validate a registry index (every entry + id/key match)
 conjure validate --registry registry-index.json
 
-# Conformance-test against the real binary (probes PATH + a --version/--help call)
+# Conformance-test against the real binary (PATH + bounded safe help probes)
 conjure test aria.json
 conjure test aria.json --skip-binary    # static rules only (CI without the runtime)
 

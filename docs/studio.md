@@ -49,8 +49,9 @@ save. If it does exist, it is loaded with the same strict parser as
   `<prompt>`, `<model-without-provider>`, `<provider/model>`, and `<session-id>`
   stand in for runtime values. Illustrative, not executed.
 - **Conformance probe** (bottom right) — press `t` to run the same binary
-  probe as `conjure test`: PATH lookup, a `--version`/`--help` call, and soft
-  checks that declared flags appear in the help output.
+  probe as `conjure test`: PATH lookup, bounded model + leading-subcommand help
+  (with later prefix tokens omitted) or root help/version fallback, and soft
+  checks that declared flags appear in the successful output.
 
 ## Keys
 

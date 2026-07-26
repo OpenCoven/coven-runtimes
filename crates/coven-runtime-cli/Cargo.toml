@@ -21,5 +21,12 @@ serde.workspace = true
 serde_json.workspace = true
 ratatui.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+command-group.workspace = true
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winapi.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true

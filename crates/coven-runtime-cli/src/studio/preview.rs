@@ -177,6 +177,7 @@ pub(crate) fn launch_preview(adapter: &RuntimeAdapter) -> Vec<PreviewLine> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use coven_runtime_registry::RegistryIndex;
     use coven_runtime_spec::{AdapterManifest, Capabilities, ModelIdTransform, SandboxMapping};
 
     fn adapter(raw: &str) -> RuntimeAdapter {
@@ -191,6 +192,25 @@ mod tests {
             .iter()
             .find(|l| l.label == label)
             .unwrap_or_else(|| panic!("no `{label}` line in {lines:?}"))
+    }
+
+    fn canonical_adapter(id: &str) -> RuntimeAdapter {
+        RegistryIndex::canonical()
+            .resolve_latest(id)
+            .unwrap_or_else(|error| panic!("resolve latest `{id}`: {error}"))
+            .adapter
+            .clone()
+    }
+
+    fn canonical_manifest(adapter: RuntimeAdapter) -> String {
+        format!(
+            "{}\n",
+            AdapterManifest {
+                adapters: vec![adapter]
+            }
+            .to_json_pretty()
+            .expect("serialize canonical one-adapter manifest")
+        )
     }
 
     /// Claude shape: positional prompt, flag-form sandbox, stream mode.
@@ -376,6 +396,81 @@ mod tests {
         assert!(launch_preview(&adapter)[0]
             .command()
             .contains("<provider/model>"));
+    }
+
+    #[test]
+    fn latest_hermes_recipe_preview_is_native_and_preserves_model_id() {
+        let a = canonical_adapter("hermes");
+        let lines = launch_preview(&a);
+
+        assert_eq!(
+            find(&lines, "one-shot").command(),
+            r#"hermes --model <provider/model> chat --source coven -Q --query="<prompt>""#
+        );
+        assert_eq!(
+            find(&lines, "interactive").command(),
+            r#"hermes --model <provider/model> chat --source coven --query="<prompt>""#
+        );
+        assert_eq!(a.version.as_deref(), Some("1.0.3"));
+        assert_eq!(a.model_id_transform, ModelIdTransform::Preserve);
+    }
+
+    #[test]
+    fn latest_opencode_recipe_preview_uses_run_and_preserves_model_id() {
+        let a = canonical_adapter("opencode");
+        let lines = launch_preview(&a);
+        let expected = r#"opencode --model <provider/model> run -- "<prompt>""#;
+
+        assert_eq!(find(&lines, "one-shot").command(), expected);
+        assert_eq!(find(&lines, "interactive").command(), expected);
+        assert_eq!(a.version.as_deref(), Some("0.1.1"));
+        assert_eq!(a.model_id_transform, ModelIdTransform::Preserve);
+    }
+
+    #[test]
+    fn latest_coven_code_recipe_preview_covers_one_shot_interactive_and_stream() {
+        let a = canonical_adapter("coven-code");
+        let lines = launch_preview(&a);
+
+        assert_eq!(
+            find(&lines, "one-shot").command(),
+            r#"coven-code --model <provider/model> --append-system-prompt "<system>" --print -- "<prompt>""#
+        );
+        assert_eq!(
+            find(&lines, "interactive").command(),
+            r#"coven-code --model <provider/model> --append-system-prompt "<system>" -- "<prompt>""#
+        );
+        assert_eq!(
+            find(&lines, "stream").command(),
+            "coven-code --model <provider/model> --append-system-prompt \"<system>\" \
+             --print --input-format stream-json --output-format stream-json \
+             --session-id <session-id>"
+        );
+        assert_eq!(
+            find(&lines, "stream resume").command(),
+            "coven-code --model <provider/model> --append-system-prompt \"<system>\" \
+             --print --input-format stream-json --output-format stream-json \
+             --resume <session-id>"
+        );
+        assert_eq!(a.version.as_deref(), Some("1.0.2"));
+        assert_eq!(a.model_id_transform, ModelIdTransform::Preserve);
+    }
+
+    #[test]
+    fn latest_examples_match_canonical_one_adapter_manifests_byte_for_byte() {
+        for (id, example) in [
+            ("hermes", include_str!("../../../../examples/hermes.json")),
+            (
+                "opencode",
+                include_str!("../../../../examples/opencode.json"),
+            ),
+        ] {
+            assert_eq!(
+                example,
+                canonical_manifest(canonical_adapter(id)),
+                "{id} example drifted from canonical latest"
+            );
+        }
     }
 
     /// `model_arg_template` takes precedence over `model_flag`, matching the

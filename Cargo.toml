@@ -21,6 +21,17 @@ thiserror = "2"
 clap = { version = "4", features = ["derive"] }
 tempfile = "3"
 ratatui = "0.30"
+command-group = "5.0.1"
+libc = "0.2"
+winapi = { version = "0.3.9", features = [
+    "impl-default",
+    "handleapi",
+    "jobapi2",
+    "processthreadsapi",
+    "tlhelp32",
+    "winbase",
+    "winerror",
+] }
 
 # Internal crates reference each other through the workspace. Explicit versions
 # (not bare paths) keep them out of cargo-deny's wildcard ban and make the crates

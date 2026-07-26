@@ -556,8 +556,84 @@ mod tests {
         let idx = RegistryIndex::canonical();
         // The seeded accepted runtimes must resolve by "latest".
         let hermes = idx.resolve_latest("hermes").expect("Hermes resolves");
-        assert_eq!(hermes.version, "1.0.2");
+        assert_eq!(hermes.version, "1.0.3");
         assert_eq!(hermes.adapter.model_flag.as_deref(), Some("--model"));
         assert!(idx.resolve_latest("copilot").is_ok());
+    }
+
+    #[test]
+    fn canonical_latest_recipes_pin_model_forwarding_contracts() {
+        let index = RegistryIndex::canonical();
+
+        let hermes = index.resolve_latest("hermes").unwrap();
+        assert_eq!(hermes.version, "1.0.3");
+        assert_eq!(hermes.adapter.executable, "hermes");
+        assert_eq!(
+            hermes.adapter.interactive_prompt_prefix_args,
+            ["chat", "--source", "coven"]
+        );
+        assert_eq!(
+            hermes.adapter.non_interactive_prompt_prefix_args,
+            ["chat", "--source", "coven", "-Q"]
+        );
+        assert_eq!(hermes.adapter.prompt_flag.as_deref(), Some("--query"));
+        assert_eq!(
+            hermes.adapter.interactive_prompt_flag.as_deref(),
+            Some("--query")
+        );
+        assert_eq!(hermes.adapter.model_flag.as_deref(), Some("--model"));
+        assert_eq!(
+            hermes.adapter.model_id_transform,
+            ModelIdTransform::Preserve
+        );
+
+        let opencode = index.resolve_latest("opencode").unwrap();
+        assert_eq!(opencode.version, "0.1.1");
+        assert_eq!(opencode.adapter.interactive_prompt_prefix_args, ["run"]);
+        assert_eq!(opencode.adapter.non_interactive_prompt_prefix_args, ["run"]);
+        assert_eq!(opencode.adapter.model_flag.as_deref(), Some("--model"));
+        assert_eq!(
+            opencode.adapter.model_id_transform,
+            ModelIdTransform::Preserve
+        );
+
+        let coven_code = index.resolve_latest("coven-code").unwrap();
+        assert_eq!(coven_code.version, "1.0.2");
+        assert_eq!(coven_code.adapter.model_flag.as_deref(), Some("--model"));
+        assert_eq!(
+            coven_code.adapter.model_id_transform,
+            ModelIdTransform::Preserve
+        );
+        assert!(coven_code.adapter.capabilities.stream);
+        let stream = coven_code.adapter.stream_args.as_ref().unwrap();
+        assert_eq!(
+            stream.prefix_args,
+            [
+                "--print",
+                "--input-format",
+                "stream-json",
+                "--output-format",
+                "stream-json"
+            ]
+        );
+        assert_eq!(stream.session_id_flag.as_deref(), Some("--session-id"));
+        assert_eq!(stream.resume_flag.as_deref(), Some("--resume"));
+
+        assert_eq!(
+            index
+                .resolve_latest("grok")
+                .unwrap()
+                .adapter
+                .model_id_transform,
+            ModelIdTransform::StripProvider
+        );
+        assert_eq!(
+            index
+                .resolve_latest("copilot")
+                .unwrap()
+                .adapter
+                .model_id_transform,
+            ModelIdTransform::StripProvider
+        );
     }
 }

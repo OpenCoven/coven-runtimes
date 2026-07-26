@@ -71,7 +71,7 @@ fn probe_report_lines(studio: &Studio) -> Vec<String> {
     let adapter = studio.adapter();
     match probe_adapter_report(adapter) {
         ProbeReport::Ok { probe, warnings } => {
-            let mut lines = vec![format!("✓ `{}` responded to `{probe}`", adapter.executable)];
+            let mut lines = vec![format!("✓ probe `{probe}` succeeded")];
             if warnings.is_empty() {
                 lines.push("✓ every declared flag seen in probe output".into());
             }

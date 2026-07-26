@@ -242,7 +242,7 @@ fn draw_preview(frame: &mut Frame, lines: Vec<Line<'static>>, area: Rect) {
 fn draw_probe(frame: &mut Frame, studio: &Studio, area: Rect) {
     let lines: Vec<Line> = match &studio.probe {
         ProbeState::NotRun => vec![Line::from(Span::styled(
-            "press t to probe the binary (PATH + --version/--help, soft flag checks)",
+            "press t to probe the binary (PATH + safe help, soft flag checks)",
             Style::default().fg(DIM),
         ))],
         ProbeState::Running => vec![Line::from(Span::styled(

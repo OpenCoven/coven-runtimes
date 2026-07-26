@@ -184,9 +184,15 @@ the real binary:
 conjure test aria.json
 ```
 
-It checks that `executable` resolves on PATH, that the binary runs cleanly for
-a bounded `--version` / `--help` probe, and (as a soft warning) that declared
-flags appear in the help output. It never sends a prompt or does work.
+It checks that `executable` resolves on PATH and that the binary runs cleanly
+for a bounded, read-only probe. When
+`non_interactive_prompt_prefix_args` begins with a bare subcommand, the probe
+uses the model selector placeholder, **only that subcommand**, and `--help`;
+prompt flags and every later prefix token are deliberately omitted. The
+subcommand must identify itself in the resulting usage text. Recipes without a
+bare leading subcommand use root `--help`, then `--version`, with no model or
+prefix tokens. Declared flags missing from the successful probe output remain
+soft warnings. The probe never sends a prompt or does work.
 
 ```
 ✓ static validation passed
@@ -228,10 +234,10 @@ conjure registry list      # your runtime shows up with its capabilities
 ```
 aria             0.1.0    baseline
 copilot          1.0.0    stream, preassignedSessionId
-coven-code       1.0.1    stream, preassignedSessionId, think, speed
+coven-code       1.0.2    stream, preassignedSessionId, think, speed
 grok             1.0.0    preassignedSessionId
-hermes           1.0.2    baseline
-opencode         0.1.0    baseline
+hermes           1.0.3    baseline
+opencode         0.1.1    baseline
 ```
 
 Two paths, depending on your confidence:

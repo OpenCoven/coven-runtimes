@@ -195,10 +195,16 @@ Beyond the static rules, `conjure test` runs **dynamic** checks that need the
 runtime present:
 
 - the `executable` resolves on `PATH`;
-- it runs cleanly for a bounded probe (`--version`, then `--help`);
+- when the non-interactive prefix begins with a bare subcommand, a bounded
+  `<model selector placeholder> <subcommand> --help` probe runs cleanly; every
+  later prefix token is omitted so a prompt-taking flag cannot consume the
+  help flag;
+- that leading subcommand identifies `<executable> <subcommand>` in its usage
+  output; recipes without one use root `--help`, then `--version`, without
+  model or prefix tokens;
 - every declared flag — `model_flag`, `system_prompt_flag`, the prompt
   bindings, sandbox, stream, continuity, and the long-form (`--x`) tokens of
-  each launch-arg list — is mentioned in probe output (a **soft warning**
+  each launch-arg list — is mentioned in successful probe output (a **soft warning**
   only — CLIs don't always list every flag).
 
 The probe never sends a prompt or does work. Use `--skip-binary` in CI where the
