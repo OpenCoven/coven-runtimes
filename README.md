@@ -17,7 +17,7 @@ See [`docs/registry.md`](docs/registry.md) (how it's maintained),
 [`docs/adoption.md`](docs/adoption.md) (how to consume it), and
 [`GOVERNANCE.md`](GOVERNANCE.md) (the acceptance bar).
 
-> Status: v0.1 — the spec, CLI, and registry are implemented and tested. The
+> Status: v0.2 — the spec, CLI, and registry are implemented and tested. The
 > `coven` core integration (reading `capabilities` instead of hardcoded
 > `harness_id == "claude"` checks) is a coordinated follow-up PR; see
 > [`docs/integration.md`](docs/integration.md).
@@ -71,7 +71,7 @@ conjure validate aria.json --verbose
 # Validate a registry index (every entry + id/key match)
 conjure validate --registry registry-index.json
 
-# Conformance-test against the real binary (probes PATH + a --version/--help call)
+# Conformance-test against the real binary (PATH + bounded safe help probes)
 conjure test aria.json
 conjure test aria.json --skip-binary    # static rules only (CI without the runtime)
 
@@ -88,8 +88,9 @@ conjure registry list                  # the accepted runtimes + capabilities
 ## The manifest, in one glance
 
 A manifest is a backward-compatible **superset** of coven's existing adapter
-JSON — every field coven reads today is unchanged; the additions are
-`capabilities`, `sandbox`, and `stream_args`.
+JSON — every field coven reads today is unchanged; the additions include
+`model_id_transform`, `capabilities`, `sandbox`, `stream_args`, and
+`continuity_args`.
 
 ```jsonc
 {
@@ -100,6 +101,7 @@ JSON — every field coven reads today is unchanged; the additions are
     "non_interactive_prompt_prefix_args": ["exec"],
     "install_hint": "Install aria and add it to PATH.",
     "model_flag": "--model",
+    "model_id_transform": "preserve",
 
     // ── additions that make integration seamless ──
     "capabilities": { "stream": true, "preassigned_session_id": true, "think": true, "speed": true },
@@ -114,7 +116,10 @@ JSON — every field coven reads today is unchanged; the additions are
 ```
 
 Field names are snake_case-canonical with camelCase aliases, so both
-`prefix_args` and `prefixArgs` parse. `sandbox` also accepts an argv-list form
+`prefix_args` and `prefixArgs` parse. `model_id_transform` controls whether
+provider-qualified model ids are preserved or have only their first provider
+segment removed; omitted metadata defaults to `strip_provider`. `sandbox` also
+accepts an argv-list form
 (`{ "full_args": ["--allow-all"], "read_only_args": ["--deny-tool", "write"] }`)
 for runtimes whose permission flags are boolean/repeatable — see the
 [GitHub Copilot CLI reference manifest](examples/copilot.json). See
@@ -134,7 +139,7 @@ let entry = RegistryIndex::canonical().resolve_latest("hermes")?;
 
 ```sh
 # Any language: pinned by release tag + checksum.
-curl -fsSLO "https://github.com/OpenCoven/coven-runtimes/releases/download/v0.1.0/registry-index.json"
+curl -fsSLO "https://github.com/OpenCoven/coven-runtimes/releases/download/v0.2.0/registry-index.json"
 ```
 
 Full recipes (pinning, checksum verification, resolution) are in

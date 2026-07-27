@@ -112,6 +112,18 @@ Guidance that isn't obvious from the field reference:
 - **Only one of `model_flag` / `model_arg_template`** is needed. Use the
   template form (`"--model {model}"`-style argv) only when selection is more
   than `--flag value`; it must contain `{model}`.
+- **Model ids default to `strip_provider`**, which removes only the first
+  provider segment before forwarding the id:
+
+  ```text
+  strip_provider: openai/gpt-5 -> gpt-5
+  strip_provider: openrouter/anthropic/claude -> anthropic/claude
+  preserve: openrouter/anthropic/claude -> openrouter/anthropic/claude
+  ```
+
+  Set `"model_id_transform": "preserve"` only when the runtime expects the
+  complete id. `preserve` is non-default and requires a real model mechanism:
+  `model_flag` or `model_arg_template`.
 - **Streaming runtimes** additionally need:
 
   ```jsonc
@@ -137,7 +149,9 @@ Guidance that isn't obvious from the field reference:
 
 Editor support: point your editor's JSON language server at
 [`schema/adapter-manifest.schema.json`](../schema/adapter-manifest.schema.json)
-for completion and inline validation while you edit.
+for completion and inline validation while you edit. Unknown fields remain an
+authoring error. Read-only index parsing is tolerant of newer fields from
+v0.2.0 onward; authoring and registry-mutation paths stay strict.
 
 ## 4. Validate
 
@@ -170,9 +184,15 @@ the real binary:
 conjure test aria.json
 ```
 
-It checks that `executable` resolves on PATH, that the binary runs cleanly for
-a bounded `--version` / `--help` probe, and (as a soft warning) that declared
-flags appear in the help output. It never sends a prompt or does work.
+It checks that `executable` resolves on PATH and that the binary runs cleanly
+for a bounded, read-only probe. When
+`non_interactive_prompt_prefix_args` begins with a bare subcommand, the probe
+uses the model selector placeholder, **only that subcommand**, and `--help`;
+prompt flags and every later prefix token are deliberately omitted. The
+subcommand must identify itself in the resulting usage text. Recipes without a
+bare leading subcommand use root `--help`, then `--version`, with no model or
+prefix tokens. Declared flags missing from the successful probe output remain
+soft warnings. The probe never sends a prompt or does work.
 
 ```
 ✓ static validation passed
@@ -214,10 +234,10 @@ conjure registry list      # your runtime shows up with its capabilities
 ```
 aria             0.1.0    baseline
 copilot          1.0.0    stream, preassignedSessionId
-coven-code       1.0.1    stream, preassignedSessionId, think, speed
+coven-code       1.0.2    stream, preassignedSessionId, think, speed
 grok             1.0.0    preassignedSessionId
-hermes           1.0.2    baseline
-opencode         0.1.0    baseline
+hermes           1.0.3    baseline
+opencode         0.1.1    baseline
 ```
 
 Two paths, depending on your confidence:

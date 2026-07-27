@@ -1,10 +1,8 @@
 //! Integration tests for `conjure registry`, exercising the real binary.
 //!
-//! The load-bearing one is `committed_index_matches_sources`: it is the drift
-//! guard that fails CI if a source manifest under `registry/runtimes/` was
-//! edited without regenerating the committed canonical index. The rest cover the
-//! generator's contracts (idempotence, version immutability) and the
-//! add/list/yank ergonomics on throwaway temp registries.
+//! These cover the generator's contracts (idempotence, version immutability)
+//! and the add/list/yank ergonomics on throwaway temp registries. The
+//! repository-only committed-index drift guard lives in `registry_drift.rs`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -14,14 +12,6 @@ use tempfile::tempdir;
 
 fn conjure() -> Command {
     Command::new(env!("CARGO_BIN_EXE_conjure"))
-}
-
-/// The workspace root, where `registry/runtimes/` and the committed index live.
-fn workspace_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
-        .canonicalize()
-        .expect("workspace root resolves")
 }
 
 /// A minimal, synthetic one-adapter manifest (id `aria`, never a built-in).
@@ -71,23 +61,6 @@ fn build(sources: &Path, out: &Path) -> Output {
 
 fn stderr(out: &Output) -> String {
     String::from_utf8_lossy(&out.stderr).into_owned()
-}
-
-/// DRIFT GUARD: the committed canonical index must equal a fresh rebuild from
-/// the source manifests. Fails if someone edited `registry/runtimes/**` without
-/// running `conjure registry build`.
-#[test]
-fn committed_index_matches_sources() {
-    let out = conjure()
-        .current_dir(workspace_root())
-        .args(["registry", "check"])
-        .output()
-        .unwrap();
-    assert!(
-        out.status.success(),
-        "canonical index is stale — run `conjure registry build` and commit it.\n{}",
-        stderr(&out)
-    );
 }
 
 #[test]

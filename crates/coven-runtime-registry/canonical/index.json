@@ -137,6 +137,49 @@
         },
         "sha256": "6e1e1d531cbc47b64c23e1367b086946daa9260b52c6a4b057c3fdf281b541aa",
         "published_at": "2026-07-12T17:10:36Z"
+      },
+      {
+        "version": "1.0.2",
+        "adapter": {
+          "id": "coven-code",
+          "label": "Coven Code",
+          "executable": "coven-code",
+          "interactive_prompt_prefix_args": [],
+          "non_interactive_prompt_prefix_args": [
+            "--print"
+          ],
+          "install_hint": "npm install -g @opencoven/coven-code (or download a release archive from https://github.com/OpenCoven/coven-code/releases), then ensure `coven-code` is on PATH.",
+          "system_prompt_flag": "--append-system-prompt",
+          "model_flag": "--model",
+          "model_id_transform": "preserve",
+          "capabilities": {
+            "stream": true,
+            "preassigned_session_id": true,
+            "think": true,
+            "speed": true
+          },
+          "sandbox": {
+            "flag": "--permission-mode",
+            "full": "bypass-permissions",
+            "read_only": "plan"
+          },
+          "stream_args": {
+            "prefix_args": [
+              "--print",
+              "--input-format",
+              "stream-json",
+              "--output-format",
+              "stream-json"
+            ],
+            "session_id_flag": "--session-id",
+            "resume_flag": "--resume"
+          },
+          "version": "1.0.2",
+          "homepage": "https://github.com/OpenCoven/coven-code",
+          "description": "Coven Code adapter for one-shot and JSONL streaming sessions with sandbox, think, and speed controls; forwards provider-qualified model IDs unchanged."
+        },
+        "sha256": "2eed8c319b6e7ebee532f26f21ebe626f5c7a9419a56c2b26691978353505f02",
+        "published_at": "2026-07-26T15:37:11Z"
       }
     ],
     "grok": [
@@ -300,6 +343,40 @@
         },
         "sha256": "d0ecc06979bb868e6ebf742a8babafbc2f39a759d369876096f919c4060ed7f1",
         "published_at": "2026-07-21T21:54:28Z"
+      },
+      {
+        "version": "1.0.3",
+        "adapter": {
+          "id": "hermes",
+          "label": "Hermes Agent",
+          "executable": "hermes",
+          "interactive_prompt_prefix_args": [
+            "chat",
+            "--source",
+            "coven"
+          ],
+          "non_interactive_prompt_prefix_args": [
+            "chat",
+            "--source",
+            "coven",
+            "-Q"
+          ],
+          "prompt_flag": "--query",
+          "interactive_prompt_flag": "--query",
+          "install_hint": "Install and complete setup for Hermes Agent from https://github.com/NousResearch/hermes-agent, then ensure the native `hermes` executable resolves on PATH.",
+          "model_flag": "--model",
+          "model_id_transform": "preserve",
+          "capabilities": {
+            "stream": false,
+            "preassigned_session_id": false,
+            "think": false,
+            "speed": false
+          },
+          "version": "1.0.3",
+          "description": "Hermes adapter using the native `hermes chat` executable and `--query` prompt binding while preserving provider-qualified model IDs."
+        },
+        "sha256": "85421471710e0a736d72f370c69361951731f2d63e255f271724a510bba5d8ef",
+        "published_at": "2026-07-26T16:15:30Z"
       }
     ],
     "opencode": [
@@ -327,6 +404,34 @@
         },
         "sha256": "78446f372a427e92c1450645b2b393d080863c047a873a99e917b1dd25f5e150",
         "published_at": "2026-07-07T12:16:43Z"
+      },
+      {
+        "version": "0.1.1",
+        "adapter": {
+          "id": "opencode",
+          "label": "OpenCode",
+          "executable": "opencode",
+          "interactive_prompt_prefix_args": [
+            "run"
+          ],
+          "non_interactive_prompt_prefix_args": [
+            "run"
+          ],
+          "install_hint": "Install OpenCode from https://opencode.ai/docs/cli (e.g. `npm i -g opencode-ai`) and ensure `opencode` resolves on PATH. Verify with `opencode run --help` — the similarly-named Go app some package managers ship has no `run` subcommand and will not work.",
+          "model_flag": "--model",
+          "model_id_transform": "preserve",
+          "capabilities": {
+            "stream": false,
+            "preassigned_session_id": false,
+            "think": false,
+            "speed": false
+          },
+          "version": "0.1.1",
+          "homepage": "https://opencode.ai",
+          "description": "OpenCode runtime adapter for Coven. Drives `opencode run` in both native launch modes and preserves provider-qualified model IDs; system prompts and tools are configured via project config (AGENTS.md / opencode.json)."
+        },
+        "sha256": "7d28d65e9776962c710da234c4e5c1fb9a4faee67467b02e0cbfe0e487c7520b",
+        "published_at": "2026-07-26T15:37:11Z"
       }
     ]
   }

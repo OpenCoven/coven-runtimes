@@ -8,7 +8,8 @@
 use std::path::PathBuf;
 
 use coven_runtime_spec::{
-    AdapterManifest, Capabilities, ContinuityArgs, RuntimeAdapter, SandboxMapping, StreamArgs,
+    validate_adapter, AdapterManifest, Capabilities, ContinuityArgs, ModelIdTransform,
+    RuntimeAdapter, SandboxMapping, StreamArgs,
 };
 use serde_json::Value;
 
@@ -129,10 +130,147 @@ fn schema_rejects_blank_prompt_and_continuity_resume_flags() {
     }
 }
 
+#[test]
+fn schema_model_id_transform_accepts_both_spellings_and_values() {
+    let validator = manifest_schema();
+
+    for field in ["model_id_transform", "modelIdTransform"] {
+        for value in ["strip_provider", "preserve"] {
+            let mut adapter = serde_json::json!({
+                "id": "x", "label": "X", "executable": "x", "install_hint": "install"
+            });
+            adapter[field] = Value::String(value.into());
+            let manifest = serde_json::json!({ "adapters": [adapter] });
+            assert_valid(&validator, &manifest, &format!("{field} with `{value}`"));
+        }
+    }
+}
+
+#[test]
+fn schema_model_id_transform_rejects_truncate() {
+    let validator = manifest_schema();
+
+    for field in ["model_id_transform", "modelIdTransform"] {
+        let mut adapter = serde_json::json!({
+            "id": "x", "label": "X", "executable": "x", "install_hint": "install"
+        });
+        adapter[field] = Value::String("truncate".into());
+        let manifest = serde_json::json!({ "adapters": [adapter] });
+        assert!(
+            validator.iter_errors(&manifest).next().is_some(),
+            "schema should reject `truncate` for `{field}`"
+        );
+    }
+}
+
+#[test]
+fn schema_model_id_transform_rejects_dual_aliases() {
+    let validator = manifest_schema();
+
+    for (snake, camel) in [("preserve", "preserve"), ("preserve", "strip_provider")] {
+        let manifest = serde_json::json!({
+            "adapters": [{
+                "id": "x",
+                "label": "X",
+                "executable": "x",
+                "install_hint": "install",
+                "model_id_transform": snake,
+                "modelIdTransform": camel
+            }]
+        });
+        assert!(
+            validator.iter_errors(&manifest).next().is_some(),
+            "schema should reject dual aliases `{snake}` / `{camel}`"
+        );
+    }
+}
+
+#[test]
+fn schema_model_id_transform_metadata_matches_aliases() {
+    let schema = load_json("schema/adapter-manifest.schema.json");
+    let properties = &schema["definitions"]["adapter"]["properties"];
+    let expected_enum = serde_json::json!(["strip_provider", "preserve"]);
+    let expected_default = Value::String("strip_provider".into());
+
+    for field in ["model_id_transform", "modelIdTransform"] {
+        assert_eq!(
+            properties[field]["enum"], expected_enum,
+            "unexpected enum for `{field}`"
+        );
+        assert_eq!(
+            properties[field]["default"], expected_default,
+            "unexpected default for `{field}`"
+        );
+    }
+    assert_eq!(
+        properties["model_id_transform"]["enum"],
+        properties["modelIdTransform"]["enum"]
+    );
+}
+
+#[test]
+fn schema_model_id_transform_rejects_blank_model_flags() {
+    let validator = manifest_schema();
+
+    for field in ["model_flag", "modelFlag"] {
+        let mut adapter = serde_json::json!({
+            "id": "x",
+            "label": "X",
+            "executable": "x",
+            "install_hint": "install",
+            "model_id_transform": "preserve"
+        });
+        adapter[field] = Value::String(" \t ".into());
+        let manifest = serde_json::json!({ "adapters": [adapter] });
+        assert!(
+            validator.iter_errors(&manifest).next().is_some(),
+            "schema should reject whitespace-only `{field}`"
+        );
+    }
+}
+
+#[test]
+fn schema_model_id_transform_accepts_null_model_flags() {
+    let validator = manifest_schema();
+
+    for field in ["model_flag", "modelFlag"] {
+        let mut adapter = serde_json::json!({
+            "id": "x", "label": "X", "executable": "x", "install_hint": "install"
+        });
+        adapter[field] = Value::Null;
+        let manifest = serde_json::json!({ "adapters": [adapter] });
+        assert_valid(&validator, &manifest, &format!("null `{field}`"));
+    }
+}
+
+#[test]
+fn preserve_model_id_transform_without_model_selection_fails_rust_validation() {
+    let manifest = AdapterManifest::from_json(
+        r#"{
+            "adapters": [{
+                "id": "x",
+                "label": "X",
+                "executable": "x",
+                "install_hint": "install",
+                "model_id_transform": "preserve"
+            }]
+        }"#,
+    )
+    .unwrap();
+
+    let errors = validate_adapter(&manifest.adapters[0]);
+    assert!(errors.iter().any(|error| {
+        error.field == "model_id_transform"
+            && error
+                .message
+                .contains("requires model_flag or model_arg_template")
+    }));
+}
+
 /// The most important direction: anything the Rust type produces must satisfy
 /// the schema. A fully-populated streaming adapter exercises every added block.
 #[test]
-fn schema_accepts_serialized_runtime_adapter() {
+fn serialized_model_id_transform_runtime_adapter_is_schema_valid() {
     let validator = manifest_schema();
     let adapter = RuntimeAdapter {
         id: "aria".into(),
@@ -144,6 +282,7 @@ fn schema_accepts_serialized_runtime_adapter() {
         system_prompt_flag: Some("--system-prompt".into()),
         model_flag: Some("--model".into()),
         model_arg_template: None,
+        model_id_transform: ModelIdTransform::Preserve,
         capabilities: Capabilities {
             stream: true,
             preassigned_session_id: true,
@@ -171,6 +310,10 @@ fn schema_accepts_serialized_runtime_adapter() {
         adapters: vec![adapter],
     };
     let instance = serde_json::to_value(&manifest).unwrap();
+    assert_eq!(
+        instance["adapters"][0]["model_id_transform"],
+        Value::String("preserve".into())
+    );
     assert_valid(&validator, &instance, "serialized RuntimeAdapter");
 }
 
@@ -189,6 +332,7 @@ fn schema_accepts_args_form_sandbox_adapter() {
         system_prompt_flag: None,
         model_flag: Some("--model".into()),
         model_arg_template: None,
+        model_id_transform: ModelIdTransform::StripProvider,
         capabilities: Capabilities {
             stream: true,
             preassigned_session_id: true,
@@ -258,6 +402,7 @@ fn schema_accepts_one_shot_headless_adapter() {
         system_prompt_flag: Some("--rules".into()),
         model_flag: Some("--model".into()),
         model_arg_template: None,
+        model_id_transform: ModelIdTransform::StripProvider,
         capabilities: Capabilities {
             stream: false,
             preassigned_session_id: true,
@@ -322,6 +467,7 @@ fn schema_accepts_baseline_adapter() {
             system_prompt_flag: None,
             model_flag: None,
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities::BASELINE,
             sandbox: None,
             stream_args: None,

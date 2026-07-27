@@ -1,12 +1,16 @@
 [package]
 name = "coven-runtime-cli"
-version = "0.1.3"
+version = "0.2.0"
 description = "conjure — author, validate, conformance-test, and package Coven runtime adapters."
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+
+# These integration tests exercise repository-level registry/ and shims/
+# artifacts, which are intentionally not part of the CLI crate archive.
+exclude = ["tests/hermes_shim.rs", "tests/registry_drift.rs"]
 
 [[bin]]
 name = "conjure"
@@ -20,6 +24,13 @@ clap.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 ratatui.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+command-group.workspace = true
+libc.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winapi.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

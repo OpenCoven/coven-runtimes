@@ -1,12 +1,16 @@
 [package]
 name = "coven-runtime-spec"
-version = "0.1.3"
+version = "0.2.0"
 description = "Runtime adapter manifest schema, capability model, and validation for the Coven runtime SDK."
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
 rust-version.workspace = true
+
+# This integration test is a repository drift guard for root-level schema/ and
+# examples/ artifacts, which are intentionally not part of the crate archive.
+exclude = ["tests/schema_examples.rs"]
 
 [dependencies]
 serde.workspace = true

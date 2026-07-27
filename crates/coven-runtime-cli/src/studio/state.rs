@@ -10,7 +10,9 @@ use std::path::PathBuf;
 
 use coven_runtime_spec::{validate_manifest, AdapterManifest, RuntimeAdapter, ValidationError};
 
-use super::fields::{cycle_sandbox, visible_fields, FieldKind, FieldSpec};
+use super::fields::{
+    cycle_model_id_transform, cycle_sandbox, visible_fields, FieldKind, FieldSpec,
+};
 
 /// Input mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,7 +34,7 @@ pub(crate) enum Event {
     NextSection,
     /// Jump to the first field of the previous section.
     PrevSection,
-    /// Enter edit mode (or toggle a Bool/SandboxKind field).
+    /// Enter edit mode (or toggle/cycle a selector field).
     Activate,
     /// Toggle / cycle the focused field without entering edit mode.
     Toggle,
@@ -226,6 +228,12 @@ impl Studio {
                         self.revalidate();
                         self.clamp_cursor();
                     }
+                    FieldKind::ModelIdTransform => {
+                        cycle_model_id_transform(self.adapter_mut());
+                        self.dirty = true;
+                        self.revalidate();
+                        self.clamp_cursor();
+                    }
                     _ if event == Event::Activate => {
                         self.edit_buffer = (field.get)(self.adapter());
                         self.mode = Mode::Edit;
@@ -328,6 +336,7 @@ impl Studio {
 mod tests {
     use super::*;
     use crate::template::{scaffold, Flavor};
+    use coven_runtime_spec::ModelIdTransform;
 
     fn studio() -> Studio {
         let manifest = scaffold("aria", Flavor::Minimal);
@@ -394,6 +403,61 @@ mod tests {
         s.apply(Event::Cancel);
         assert_eq!(s.manifest, before);
         assert!(!s.dirty);
+    }
+
+    #[test]
+    fn model_transform_field_cycles_without_free_text() {
+        let mut manifest = scaffold("aria", Flavor::Minimal);
+        manifest.adapters[0].model_flag = None;
+        let mut studio = Studio::new(manifest, PathBuf::from("aria.json"), false);
+        studio.cursor = studio
+            .fields()
+            .iter()
+            .position(|field| field.label == "model_id_transform")
+            .unwrap();
+        assert_eq!(
+            studio.adapter().model_id_transform,
+            ModelIdTransform::StripProvider
+        );
+        studio.apply(Event::Toggle);
+        assert_eq!(
+            studio.adapter().model_id_transform,
+            ModelIdTransform::Preserve
+        );
+        assert_eq!(studio.mode, Mode::Nav);
+        assert!(studio.dirty);
+        assert!(
+            studio
+                .focused_errors()
+                .iter()
+                .any(|error| error.field == "model_id_transform"),
+            "{:?}",
+            studio.errors
+        );
+
+        studio.cursor = studio
+            .fields()
+            .iter()
+            .position(|field| field.label == "model_flag")
+            .unwrap();
+        studio.apply(Event::Activate);
+        for character in "--model".chars() {
+            studio.apply(Event::Char(character));
+        }
+        studio.apply(Event::Commit);
+        studio.cursor = studio
+            .fields()
+            .iter()
+            .position(|field| field.label == "model_id_transform")
+            .unwrap();
+        assert!(studio.focused_errors().is_empty(), "{:?}", studio.errors);
+
+        studio.apply(Event::Activate);
+        assert_eq!(
+            studio.adapter().model_id_transform,
+            ModelIdTransform::StripProvider
+        );
+        assert_eq!(studio.mode, Mode::Nav);
     }
 
     #[test]

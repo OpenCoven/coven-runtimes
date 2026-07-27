@@ -132,6 +132,34 @@ impl ContinuityArgs {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModelIdTransform {
+    #[default]
+    StripProvider,
+    Preserve,
+}
+
+impl ModelIdTransform {
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::StripProvider => "strip_provider",
+            Self::Preserve => "preserve",
+        }
+    }
+
+    pub const fn is_default(&self) -> bool {
+        matches!(self, Self::StripProvider)
+    }
+
+    pub const fn toggled(self) -> Self {
+        match self {
+            Self::StripProvider => Self::Preserve,
+            Self::Preserve => Self::StripProvider,
+        }
+    }
+}
+
 /// A single runtime adapter definition.
 ///
 /// Field names and `camelCase` aliases match coven's `ExternalHarnessAdapterSpec`
@@ -191,6 +219,13 @@ pub struct RuntimeAdapter {
         skip_serializing_if = "Option::is_none"
     )]
     pub model_arg_template: Option<String>,
+    /// How a provider-qualified model id is forwarded to the runtime.
+    #[serde(
+        default,
+        alias = "modelIdTransform",
+        skip_serializing_if = "ModelIdTransform::is_default"
+    )]
+    pub model_id_transform: ModelIdTransform,
 
     // ── Additions beyond coven's current manifest ────────────────────────────
     /// Behavioral capabilities. Defaults to the conservative baseline (all off).
@@ -228,7 +263,13 @@ pub struct RuntimeAdapter {
 impl RuntimeAdapter {
     /// Whether this adapter declares any model-selection mechanism.
     pub fn supports_model(&self) -> bool {
-        self.model_flag.is_some() || self.model_arg_template.is_some()
+        self.model_flag
+            .as_deref()
+            .is_some_and(|flag| !flag.trim().is_empty())
+            || self
+                .model_arg_template
+                .as_deref()
+                .is_some_and(|template| !template.trim().is_empty())
     }
 
     /// Whether this adapter declares a sandbox/permission mechanism.
@@ -240,6 +281,111 @@ impl RuntimeAdapter {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn adapter(raw: &str) -> RuntimeAdapter {
+        AdapterManifest::from_json(raw)
+            .unwrap()
+            .adapters
+            .into_iter()
+            .next()
+            .unwrap()
+    }
+
+    #[test]
+    fn model_id_transform_defaults_aliases_and_serializes_canonically() {
+        let implicit = adapter(
+            r#"{ "adapters": [{ "id": "x", "label": "X", "executable": "x", "install_hint": "h" }]}"#,
+        );
+        assert_eq!(implicit.model_id_transform, ModelIdTransform::StripProvider);
+
+        let camel = adapter(
+            r#"{ "adapters": [{ "id": "x", "label": "X", "executable": "x", "install_hint": "h", "modelIdTransform": "preserve" }]}"#,
+        );
+        assert_eq!(camel.model_id_transform, ModelIdTransform::Preserve);
+
+        let default_json = serde_json::to_value(&implicit).unwrap();
+        assert!(default_json.get("model_id_transform").is_none());
+
+        let preserve_json = serde_json::to_value(&camel).unwrap();
+        assert_eq!(preserve_json["model_id_transform"], "preserve");
+    }
+
+    #[test]
+    fn model_id_transform_explicit_default_and_helpers_are_stable() {
+        let explicit = adapter(
+            r#"{ "adapters": [{ "id": "x", "label": "X", "executable": "x", "install_hint": "h", "model_id_transform": "strip_provider" }]}"#,
+        );
+        assert_eq!(explicit.model_id_transform, ModelIdTransform::StripProvider);
+
+        for (transform, name, toggled) in [
+            (
+                ModelIdTransform::StripProvider,
+                "strip_provider",
+                ModelIdTransform::Preserve,
+            ),
+            (
+                ModelIdTransform::Preserve,
+                "preserve",
+                ModelIdTransform::StripProvider,
+            ),
+        ] {
+            assert_eq!(transform.as_str(), name);
+            assert_eq!(transform.toggled(), toggled);
+        }
+    }
+
+    #[test]
+    fn unknown_model_id_transform_is_rejected() {
+        let error = AdapterManifest::from_json(
+            r#"{ "adapters": [{ "id": "x", "label": "X", "executable": "x", "install_hint": "h", "model_id_transform": "truncate" }]}"#,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("unknown variant"));
+    }
+
+    #[test]
+    fn duplicate_model_id_transform_aliases_are_rejected() {
+        for (snake, camel) in [("preserve", "preserve"), ("preserve", "strip_provider")] {
+            let error = AdapterManifest::from_json(&format!(
+                r#"{{
+                    "adapters": [{{
+                        "id": "x",
+                        "label": "X",
+                        "executable": "x",
+                        "install_hint": "h",
+                        "model_id_transform": "{snake}",
+                        "modelIdTransform": "{camel}"
+                    }}]
+                }}"#
+            ))
+            .unwrap_err();
+            assert!(
+                error.to_string().contains("duplicate field"),
+                "unexpected error for {snake}/{camel}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn supports_model_requires_non_blank_selector() {
+        let mut candidate = adapter(
+            r#"{ "adapters": [{ "id": "x", "label": "X", "executable": "x", "install_hint": "h" }]}"#,
+        );
+        assert!(!candidate.supports_model());
+
+        candidate.model_flag = Some(" \t ".into());
+        assert!(!candidate.supports_model());
+
+        candidate.model_flag = Some("--model".into());
+        assert!(candidate.supports_model());
+
+        candidate.model_flag = None;
+        candidate.model_arg_template = Some(" \n ".into());
+        assert!(!candidate.supports_model());
+
+        candidate.model_arg_template = Some("-c model={model}".into());
+        assert!(candidate.supports_model());
+    }
 
     /// The current hermes.json shipped by coven must deserialize unchanged, with
     /// all additions defaulting to the conservative baseline.

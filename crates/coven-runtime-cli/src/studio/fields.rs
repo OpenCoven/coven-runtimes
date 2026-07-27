@@ -50,6 +50,8 @@ pub(crate) enum FieldKind {
     Bool,
     /// The sandbox form selector: cycles none → flag → args.
     SandboxKind,
+    /// Model id forwarding: cycles strip_provider ↔ preserve.
+    ModelIdTransform,
 }
 
 /// One editable field: metadata plus total get/set accessors.
@@ -154,6 +156,11 @@ pub(crate) fn cycle_sandbox(adapter: &mut RuntimeAdapter) {
         }),
         Some(SandboxMapping::Args { .. }) => None,
     };
+}
+
+/// Cycle how provider-qualified model ids are forwarded to the runtime.
+pub(crate) fn cycle_model_id_transform(adapter: &mut RuntimeAdapter) {
+    adapter.model_id_transform = adapter.model_id_transform.toggled();
 }
 
 // ── the catalog ──────────────────────────────────────────────────────────────
@@ -284,6 +291,15 @@ pub(crate) static IDENTITY_AND_CORE: &[FieldSpec] = &[
         error_keys: &["model_arg_template"],
         get: |a| opt(&a.model_arg_template),
         set: |a, v| a.model_arg_template = set_opt(v),
+    },
+    FieldSpec {
+        label: "model_id_transform",
+        section: Section::Model,
+        kind: FieldKind::ModelIdTransform,
+        help: "Space/Enter cycles strip_provider ↔ preserve; preserve requires model_flag or model_arg_template.",
+        error_keys: &["model_id_transform"],
+        get: |a| a.model_id_transform.as_str().to_string(),
+        set: |_, _| {},
     },
     FieldSpec {
         label: "stream",
@@ -560,7 +576,7 @@ pub(crate) fn visible_fields(adapter: &RuntimeAdapter) -> Vec<&'static FieldSpec
 #[cfg(test)]
 mod tests {
     use super::*;
-    use coven_runtime_spec::Capabilities;
+    use coven_runtime_spec::{Capabilities, ModelIdTransform};
 
     fn full_adapter() -> RuntimeAdapter {
         RuntimeAdapter {
@@ -575,6 +591,7 @@ mod tests {
             system_prompt_flag: Some("--rules".into()),
             model_flag: Some("--model".into()),
             model_arg_template: None,
+            model_id_transform: ModelIdTransform::StripProvider,
             capabilities: Capabilities {
                 stream: false,
                 preassigned_session_id: true,
