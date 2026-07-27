@@ -88,8 +88,9 @@ conjure registry list                  # the accepted runtimes + capabilities
 ## The manifest, in one glance
 
 A manifest is a backward-compatible **superset** of coven's existing adapter
-JSON — every field coven reads today is unchanged; the additions are
-`capabilities`, `sandbox`, and `stream_args`.
+JSON — every field coven reads today is unchanged; the additions include
+`model_id_transform`, `capabilities`, `sandbox`, `stream_args`, and
+`continuity_args`.
 
 ```jsonc
 {
@@ -100,6 +101,7 @@ JSON — every field coven reads today is unchanged; the additions are
     "non_interactive_prompt_prefix_args": ["exec"],
     "install_hint": "Install aria and add it to PATH.",
     "model_flag": "--model",
+    "model_id_transform": "preserve",
 
     // ── additions that make integration seamless ──
     "capabilities": { "stream": true, "preassigned_session_id": true, "think": true, "speed": true },
@@ -114,7 +116,10 @@ JSON — every field coven reads today is unchanged; the additions are
 ```
 
 Field names are snake_case-canonical with camelCase aliases, so both
-`prefix_args` and `prefixArgs` parse. `sandbox` also accepts an argv-list form
+`prefix_args` and `prefixArgs` parse. `model_id_transform` controls whether
+provider-qualified model ids are preserved or have only their first provider
+segment removed; omitted metadata defaults to `strip_provider`. `sandbox` also
+accepts an argv-list form
 (`{ "full_args": ["--allow-all"], "read_only_args": ["--deny-tool", "write"] }`)
 for runtimes whose permission flags are boolean/repeatable — see the
 [GitHub Copilot CLI reference manifest](examples/copilot.json). See
