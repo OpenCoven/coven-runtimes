@@ -5,23 +5,23 @@
 # protection's "Require review from Code Owners" enabled) is what makes a merge
 # equivalent to approval. See GOVERNANCE.md.
 #
-# Owners: @BunsDev and @romgenie (repo maintainers, both with write access).
+# Owners: @BunsDev and @CompleteDotTech (repo maintainers, both with write access).
 # Two owners means either can review the other's PRs, so protected-path changes
 # stay mergeable under enforce_admins. To govern via the org's
 # @OpenCoven/maintainers team instead, grant that team write access to this repo
 # and swap the handles below (granting team access needs the `admin:org` scope).
 
 # The accepted-runtime source manifests: acceptance decisions live here.
-/registry/                              @BunsDev @romgenie
+/registry/                              @BunsDev @CompleteDotTech
 
 # The compiled index is generated — guard it so it can only change via a rebuild
 # reviewed alongside its source manifest.
-/crates/coven-runtime-registry/canonical/  @BunsDev @romgenie
+/crates/coven-runtime-registry/canonical/  @BunsDev @CompleteDotTech
 
 # The SDK crates and shared spec/schema.
-/crates/                                @BunsDev @romgenie
-/schema/                                @BunsDev @romgenie
+/crates/                                @BunsDev @CompleteDotTech
+/schema/                                @BunsDev @CompleteDotTech
 
 # Governance, acceptance criteria, and the release/publish pipeline.
-/GOVERNANCE.md                          @BunsDev @romgenie
-/.github/                               @BunsDev @romgenie
+/GOVERNANCE.md                          @BunsDev @CompleteDotTech
+/.github/                               @BunsDev @CompleteDotTech
