@@ -3186,10 +3186,15 @@ printf natural > "$marker_dir/natural-exit"
         use std::fs;
         use std::os::unix::fs::PermissionsExt;
 
-        fs::write(path, body).unwrap();
-        let mut perms = fs::metadata(path).unwrap().permissions();
+        // Publish a closed inode at the executable path. Some Linux CI
+        // filesystems can briefly return ETXTBSY when a just-written script is
+        // executed, even after the writer was dropped.
+        let staged = path.with_extension("staged");
+        fs::write(&staged, body).unwrap();
+        let mut perms = fs::metadata(&staged).unwrap().permissions();
         perms.set_mode(0o755);
-        fs::set_permissions(path, perms).unwrap();
+        fs::set_permissions(&staged, perms).unwrap();
+        fs::rename(staged, path).unwrap();
     }
 
     #[cfg(unix)]
