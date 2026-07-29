@@ -1,0 +1,73 @@
+{
+  "format": 1,
+  "runtime": "opencode",
+  "sequence": 1,
+  "issuedAt": "2026-07-24T00:00:00.000Z",
+  "expiresAt": "2030-01-01T00:00:00.000Z",
+  "schemas": [
+    {
+      "id": "opencode-run-json-v1",
+      "requires": { "json": true, "session": true, "protocol": "json" },
+      "eventTypes": {
+        "ignored": ["step_start", "step_finish", "reasoning"],
+        "text": ["text"],
+        "toolStart": [],
+        "toolProgress": [],
+        "toolEnd": [],
+        "toolComplete": ["tool_use"],
+        "error": ["error"]
+      },
+      "shape": {
+        "envelope": ["part", "data", "root"],
+        "discriminator": { "envelope": "root", "field": "type" },
+        "textEnvelope": ["part", "data"],
+        "toolEnvelope": ["part"],
+        "payloadKind": { "field": "type", "text": ["text"], "tool": ["tool"] },
+        "sessionId": ["sessionID", "sessionId", "session_id"],
+        "id": ["id", "callID", "callId", "toolCallId", "tool_call_id"],
+        "name": ["tool", "name"],
+        "text": ["text", "content"],
+        "state": ["state"],
+        "input": ["input"],
+        "output": ["output"],
+        "error": ["error"],
+        "status": ["status"],
+        "terminalStates": ["completed", "complete", "error", "failed", "cancelled", "canceled", "aborted", "interrupted", "timeout", "timed_out"],
+        "errorStates": ["error", "failed", "cancelled", "canceled", "aborted", "interrupted", "timeout", "timed_out"]
+      },
+      "launch": { "structuredOutput": { "option": "--format", "value": "json" }, "sessionOption": "--session", "requiredFlags": [] }
+    },
+    {
+      "id": "opencode-run-json-legacy",
+      "requires": { "json": true, "protocol": "json-legacy" },
+      "eventTypes": {
+        "ignored": ["step_start", "step_finish", "reasoning"],
+        "text": ["message", "assistant_text"],
+        "toolStart": ["tool"],
+        "toolProgress": [],
+        "toolEnd": ["tool_output"],
+        "toolComplete": ["tool_call"],
+        "error": ["error", "failed"]
+      },
+      "shape": {
+        "envelope": ["part", "data", "root"],
+        "discriminator": { "envelope": "root", "field": "type" },
+        "textEnvelope": ["part", "data"],
+        "toolEnvelope": ["data", "root"],
+        "payloadKind": { "field": "type", "text": ["text"], "tool": ["tool"] },
+        "sessionId": ["sessionID", "sessionId", "session_id"],
+        "id": ["id", "callID", "callId", "toolCallId", "tool_call_id"],
+        "name": ["tool", "name"],
+        "text": ["text", "content"],
+        "state": ["state"],
+        "input": ["input"],
+        "output": ["output"],
+        "error": ["error"],
+        "status": ["status"],
+        "terminalStates": ["completed", "complete", "error", "failed", "cancelled", "canceled", "aborted", "interrupted", "timeout", "timed_out"],
+        "errorStates": ["error", "failed", "cancelled", "canceled", "aborted", "interrupted", "timeout", "timed_out"]
+      },
+      "launch": { "structuredOutput": { "option": "--format", "value": "json-legacy" }, "requiredFlags": [] }
+    }
+  ]
+}
