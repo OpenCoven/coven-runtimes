@@ -43,7 +43,15 @@ const READ_ONLY_PROBE_FLAGS: [&str; 4] = ["--help", "-h", "--version", "-V"];
 /// and finishing pipe readers after the main probe deadline.
 const PROBE_CLEANUP_GRACE: Duration = Duration::from_millis(500);
 const CLEANUP_RETRY_DELAY: Duration = Duration::from_millis(10);
+/// Retry transient process launch races where Linux reports ETXTBSY while an
+/// executable is being swapped or still being written.
+const PROBE_SPAWN_RETRY_DELAYS: [Duration; 3] = [
+    Duration::from_millis(10),
+    Duration::from_millis(25),
+    Duration::from_millis(50),
+];
 const MAX_CLEANUP_ERRORS: usize = 8;
+const PROBE_TEXT_FILE_BUSY_ERROR_CODE: i32 = 26;
 
 #[derive(Args)]
 pub struct TestArgs {
@@ -608,6 +616,25 @@ fn group_already_exited(error: &io::Error) -> bool {
     {
         // `killpg` reports ESRCH once the process group is already empty.
         error.raw_os_error() == Some(3)
+    }
+    #[cfg(not(unix))]
+    {
+        false
+    }
+}
+
+fn is_transient_probe_spawn_error(error: &io::Error) -> bool {
+    #[cfg(unix)]
+    {
+        // `probe` fixtures are written and then renamed into place; very short
+        // window races can return ETXTBSY (raw code 26) or ResourceBusy.
+        // Those are safe to retry rather than treating as a hard probe failure.
+        if let Some(raw_error_code) = error.raw_os_error() {
+            if raw_error_code == PROBE_TEXT_FILE_BUSY_ERROR_CODE {
+                return true;
+            }
+        }
+        matches!(error.kind(), io::ErrorKind::ResourceBusy)
     }
     #[cfg(not(unix))]
     {
@@ -1500,20 +1527,35 @@ fn run_probe_command_with_registry(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let mut child = match ProbeChild::spawn(&mut command) {
-        Ok(child) => child,
-        Err(SpawnProbeError::BeforeSpawn(error)) => {
-            let cleanup_deadline = Instant::now() + PROBE_CLEANUP_GRACE;
-            return Err(combine_probe_cleanup_error(
-                error,
-                cancel_cleanup_supervisor(supervisor, registry, cleanup_deadline),
-            ));
-        }
-        #[cfg(windows)]
-        Err(SpawnProbeError::PostSpawn { error, child }) => {
-            return Err(cleanup_after_spawn_error(
-                error, *child, supervisor, registry, spawner,
-            ));
+    let mut child = {
+        let mut attempt = 0;
+        loop {
+            match ProbeChild::spawn(&mut command) {
+                Ok(child) => break child,
+                Err(SpawnProbeError::BeforeSpawn(error)) => {
+                    attempt += 1;
+                    // Retry transient launch races only while the probe is in the
+                    // pre-exec window; once the spawn error is non-transient or
+                    // out of retries, propagate original behavior.
+                    if is_transient_probe_spawn_error(&error)
+                        && attempt <= PROBE_SPAWN_RETRY_DELAYS.len()
+                    {
+                        thread::sleep(PROBE_SPAWN_RETRY_DELAYS[attempt - 1]);
+                        continue;
+                    }
+                    let cleanup_deadline = Instant::now() + PROBE_CLEANUP_GRACE;
+                    return Err(combine_probe_cleanup_error(
+                        error,
+                        cancel_cleanup_supervisor(supervisor, registry, cleanup_deadline),
+                    ));
+                }
+                #[cfg(windows)]
+                Err(SpawnProbeError::PostSpawn { error, child }) => {
+                    return Err(cleanup_after_spawn_error(
+                        error, *child, supervisor, registry, spawner,
+                    ));
+                }
+            }
         }
     };
     let stdout = match child.take_stdout() {
@@ -3184,17 +3226,38 @@ printf natural > "$marker_dir/natural-exit"
     #[cfg(unix)]
     fn write_unix_script(path: &Path, body: &str) {
         use std::fs;
+        use std::io::Write;
+        use std::os::unix::fs::OpenOptionsExt;
         use std::os::unix::fs::PermissionsExt;
 
         // Publish a closed inode at the executable path. Some Linux CI
         // filesystems can briefly return ETXTBSY when a just-written script is
         // executed, even after the writer was dropped.
         let staged = path.with_extension("staged");
-        fs::write(&staged, body).unwrap();
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .mode(0o755)
+            .open(&staged)
+            .unwrap();
+        file.write_all(body.as_bytes()).unwrap();
+        file.sync_all().unwrap();
         let mut perms = fs::metadata(&staged).unwrap().permissions();
         perms.set_mode(0o755);
         fs::set_permissions(&staged, perms).unwrap();
         fs::rename(staged, path).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn probe_spawn_transient_error_matches_text_file_busy() {
+        let busy = io::Error::from_raw_os_error(PROBE_TEXT_FILE_BUSY_ERROR_CODE);
+        assert!(is_transient_probe_spawn_error(&busy));
+        let other = io::Error::from_raw_os_error(2);
+        assert!(!is_transient_probe_spawn_error(&other));
+        let resource_busy = io::Error::new(io::ErrorKind::ResourceBusy, "busy");
+        assert!(is_transient_probe_spawn_error(&resource_busy));
     }
 
     #[cfg(unix)]
