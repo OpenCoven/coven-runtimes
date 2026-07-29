@@ -36,6 +36,17 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+  compatibility-registry:
+    name: Compatibility registry
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify compatibility registry contracts
+        run: node scripts/compatibility-registry.test.mjs
+
   cargo-deny:
     name: Dependency audit
     runs-on: ubuntu-latest

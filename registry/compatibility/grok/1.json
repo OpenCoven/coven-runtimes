@@ -1,0 +1,31 @@
+{
+  "format": 1,
+  "runtime": "grok-build",
+  "sequence": 1,
+  "issuedAt": "2026-07-26T00:00:00.000Z",
+  "expiresAt": "2030-01-01T00:00:00.000Z",
+  "schemas": [
+    {
+      "id": "grok-build-streaming-json-v1",
+      "requires": { "streamingJson": true, "options": ["--output-format"] },
+      "eventTypes": { "ignored": ["thought"], "text": ["text"], "end": ["end"], "error": ["error"], "toolStart": [], "toolProgress": [], "toolEnd": [], "toolComplete": [] },
+      "fields": {
+        "type": ["type"],
+        "text": ["data"],
+        "sessionId": ["sessionId", "session_id"],
+        "message": ["message"],
+        "usage": ["usage"],
+        "totalCostUsd": ["total_cost_usd"],
+        "id": ["id", "tool_call_id"],
+        "name": ["name", "tool_name"],
+        "input": ["input"],
+        "output": ["output", "result"],
+        "state": ["state", "status"],
+        "error": ["error"],
+        "terminalStates": ["completed", "complete", "failed", "error"],
+        "errorStates": ["failed", "error"]
+      },
+      "launch": { "outputOption": "--output-format", "outputValue": "streaming-json" }
+    }
+  ]
+}

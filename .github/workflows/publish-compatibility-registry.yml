@@ -1,0 +1,49 @@
+name: Publish compatibility registry
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: compatibility-registry-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Sign and build Pages site
+    runs-on: ubuntu-latest
+    environment: compatibility-registry-publisher
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Verify publisher contracts
+        run: node scripts/compatibility-registry.test.mjs
+      - name: Build signed public registry
+        env:
+          COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM: ${{ secrets.COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM }}
+          COMPATIBILITY_GROK_PRIVATE_KEY_PEM: ${{ secrets.COMPATIBILITY_GROK_PRIVATE_KEY_PEM }}
+        run: node scripts/build-compatibility-registry-site.mjs
+      - name: Upload public Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    name: Deploy Pages site
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy Pages artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
