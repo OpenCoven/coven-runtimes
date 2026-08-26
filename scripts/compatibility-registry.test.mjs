@@ -14,13 +14,13 @@ function readSource(relativePath) {
   return JSON.parse(readFileSync(path.join(root, relativePath), "utf8"));
 }
 
-function assertUnsignedSource(bundle, runtime) {
+function assertUnsignedSource(bundle, runtime, collectionKey) {
   assert.equal(bundle.format, 1);
   assert.equal(bundle.runtime, runtime);
   assert.equal(bundle.sequence, 1);
   assert.equal(Object.hasOwn(bundle, "signature"), false);
   assert.equal(Object.hasOwn(bundle, "keyId"), false);
-  assert.ok(Array.isArray(bundle.schemas) && bundle.schemas.length > 0);
+  assert.ok(Array.isArray(bundle[collectionKey]) && bundle[collectionKey].length > 0);
 }
 
 function latestSequencePath(runtimeDirectory) {
@@ -45,9 +45,17 @@ function assertNoPrivateKeyLeak(currentFile, privateKeyPem) {
 
 const opencode = readSource("registry/compatibility/opencode/1.json");
 const grok = readSource("registry/compatibility/grok/1.json");
+const openclaw = readSource("registry/compatibility/openclaw/1.json");
 
-assertUnsignedSource(opencode, "opencode");
-assertUnsignedSource(grok, "grok-build");
+assertUnsignedSource(opencode, "opencode", "schemas");
+assertUnsignedSource(grok, "grok-build", "schemas");
+assertUnsignedSource(openclaw, "openclaw", "profiles");
+assert.equal(openclaw.profiles.length, 1);
+assert.equal(
+  openclaw.profiles[0].requires.agentEventSchemaHash,
+  "ed68832d5ecbc52de7ad5394933cb2a0df7b0f0b6f7a880127f688becbd76bd2",
+);
+assert.deepEqual(openclaw.profiles[0].eventNames, ["agent", "session.tool"]);
 
 assert.equal(
   canonicalPayload({ z: 1, runtime: "opencode", array: [true], signature: { algorithm: "ed25519", value: "excluded" } }),
