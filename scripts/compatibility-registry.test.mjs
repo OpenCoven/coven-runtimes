@@ -50,6 +50,11 @@ const openclaw = readSource("registry/compatibility/openclaw/1.json");
 assertUnsignedSource(opencode, "opencode", "schemas");
 assertUnsignedSource(grok, "grok-build", "schemas");
 assertUnsignedSource(openclaw, "openclaw", "profiles");
+assert.equal(
+  payloadHash(openclaw),
+  "c14d44e311bbf1f540836b6881403bd6147463bfaeebaaf756d4c6111dc0bb49",
+  "OpenClaw genesis source must exactly match Cave's immutable built-in payload",
+);
 assert.equal(openclaw.profiles.length, 1);
 assert.equal(
   openclaw.profiles[0].requires.agentEventSchemaHash,
