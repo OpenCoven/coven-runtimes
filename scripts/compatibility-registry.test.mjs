@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync, verify } from "node:crypto";
-import { mkdirSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFileSync, readdirSync } from "node:fs";
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { canonicalPayload, payloadHash, readUnsignedBundle, signBundle } from "./compatibility-registry.mjs";
@@ -105,44 +106,38 @@ for (const { bundle, keyPem } of [
 assert.deepEqual(readUnsignedBundle(path.join(root, "registry/compatibility/grok/1.json")), grok);
 
 const grokKey = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-const output = path.join(root, ".test-artifacts", `compatibility-registry-site-${process.pid}`);
-rmSync(output, { recursive: true, force: true });
-mkdirSync(output, { recursive: true });
-try {
-  const checkpoints = buildCompatibilityRegistrySite({
-    root,
-    output,
-    opencodePrivateKeyPem: privateKeyPem,
-    grokPrivateKeyPem: grokKey,
-    openclawPrivateKeyPem,
-  });
-  const opencodeCurrent = await readFile(path.join(output, "opencode/current.json"), "utf8");
-  const opencodeLatest = await readFile(latestSequencePath(path.join(output, "opencode")), "utf8");
-  const grokCurrent = await readFile(path.join(output, "grok/current.json"), "utf8");
-  const grokLatest = await readFile(latestSequencePath(path.join(output, "grok")), "utf8");
-  const openclawCurrent = await readFile(path.join(output, "openclaw/current.json"), "utf8");
-  const openclawLatest = await readFile(latestSequencePath(path.join(output, "openclaw")), "utf8");
-  assert.equal(opencodeCurrent, opencodeLatest);
-  assert.equal(grokCurrent, grokLatest);
-  assert.equal(openclawCurrent, openclawLatest);
-  assert.equal(JSON.parse(opencodeCurrent).keyId, undefined, "genesis payload must match Cave's pinned sequence-one contract");
-  assert.equal(JSON.parse(grokCurrent).keyId, undefined, "genesis payload must match Cave's pinned sequence-one contract");
-  const publishedOpenClaw = JSON.parse(openclawCurrent);
-  assert.equal(publishedOpenClaw.keyId, undefined, "OpenClaw genesis payload must match Cave's pinned sequence-one contract");
-  assert.equal(
-    verify(null, Buffer.from(canonicalPayload(publishedOpenClaw)), openclawPublicKey, Buffer.from(publishedOpenClaw.signature.value, "base64")),
-    true,
-  );
-  assert.equal(checkpoints.openclaw.sequence, 1);
-  assert.match(checkpoints.openclaw.payloadHash, /^[a-f0-9]{64}$/);
-  assert.equal(checkpoints.openclaw.payloadHash, payloadHash(publishedOpenClaw));
-  assert.deepEqual(JSON.parse(await readFile(path.join(output, "checkpoints.json"), "utf8")), checkpoints);
-  assertNoPrivateKeyLeak(opencodeCurrent, privateKeyPem);
-  assertNoPrivateKeyLeak(grokCurrent, grokKey);
-  assertNoPrivateKeyLeak(openclawCurrent, openclawPrivateKeyPem);
-} finally {
-  rmSync(output, { recursive: true, force: true });
-}
+const output = await mkdtemp(path.join(tmpdir(), "compatibility-registry-site-"));
+const checkpoints = buildCompatibilityRegistrySite({
+  root,
+  output,
+  opencodePrivateKeyPem: privateKeyPem,
+  grokPrivateKeyPem: grokKey,
+  openclawPrivateKeyPem,
+});
+const opencodeCurrent = await readFile(path.join(output, "opencode/current.json"), "utf8");
+const opencodeLatest = await readFile(latestSequencePath(path.join(output, "opencode")), "utf8");
+const grokCurrent = await readFile(path.join(output, "grok/current.json"), "utf8");
+const grokLatest = await readFile(latestSequencePath(path.join(output, "grok")), "utf8");
+const openclawCurrent = await readFile(path.join(output, "openclaw/current.json"), "utf8");
+const openclawLatest = await readFile(latestSequencePath(path.join(output, "openclaw")), "utf8");
+assert.equal(opencodeCurrent, opencodeLatest);
+assert.equal(grokCurrent, grokLatest);
+assert.equal(openclawCurrent, openclawLatest);
+assert.equal(JSON.parse(opencodeCurrent).keyId, undefined, "genesis payload must match Cave's pinned sequence-one contract");
+assert.equal(JSON.parse(grokCurrent).keyId, undefined, "genesis payload must match Cave's pinned sequence-one contract");
+const publishedOpenClaw = JSON.parse(openclawCurrent);
+assert.equal(publishedOpenClaw.keyId, undefined, "OpenClaw genesis payload must match Cave's pinned sequence-one contract");
+assert.equal(
+  verify(null, Buffer.from(canonicalPayload(publishedOpenClaw)), openclawPublicKey, Buffer.from(publishedOpenClaw.signature.value, "base64")),
+  true,
+);
+assert.equal(checkpoints.openclaw.sequence, 1);
+assert.match(checkpoints.openclaw.payloadHash, /^[a-f0-9]{64}$/);
+assert.equal(checkpoints.openclaw.payloadHash, payloadHash(publishedOpenClaw));
+assert.deepEqual(JSON.parse(await readFile(path.join(output, "checkpoints.json"), "utf8")), checkpoints);
+assertNoPrivateKeyLeak(opencodeCurrent, privateKeyPem);
+assertNoPrivateKeyLeak(grokCurrent, grokKey);
+assertNoPrivateKeyLeak(openclawCurrent, openclawPrivateKeyPem);
 
 const workflow = readFileSync(new URL("../.github/workflows/publish-compatibility-registry.yml", import.meta.url), "utf8");
 assert.match(workflow, /workflow_dispatch/);
@@ -161,9 +156,7 @@ assert.match(ci, /node scripts\/compatibility-registry\.test\.mjs/);
 
 const runbook = readFileSync(new URL("../docs/compatibility-registry-publisher.md", import.meta.url), "utf8");
 assert.match(runbook, /opencoven\.github\.io\/coven-runtimes\/opencode\/current\.json/);
-assert.match(runbook, /opencoven\.github\.io\/coven-runtimes\/openclaw\/current\.json/);
 assert.match(runbook, /OPENCODE_SCHEMA_REGISTRY_CHECKPOINT/);
 assert.match(runbook, /GROK_SCHEMA_REGISTRY_CHECKPOINT/);
-assert.match(runbook, /OPENCLAW_SCHEMA_REGISTRY_CHECKPOINT/);
 
 console.log("compatibility registry source contracts: pass");

@@ -1,7 +1,7 @@
 # Compatibility registry publisher
 
 `coven-runtimes` publishes the public, signed compatibility contracts used by
-Coven Cave’s OpenCode, Grok, and OpenClaw integrations. The publisher owns the private
+Coven Cave’s OpenCode and Grok integrations. The publisher owns the private
 keys; Cave packages only public endpoints, public keys, and immutable
 sequence/hash checkpoints.
 
@@ -12,7 +12,6 @@ direct HTTPS documents (no redirects):
 
 - `https://opencoven.github.io/coven-runtimes/opencode/current.json`
 - `https://opencoven.github.io/coven-runtimes/grok/current.json`
-- `https://opencoven.github.io/coven-runtimes/openclaw/current.json`
 
 Every deployed source sequence is also preserved at
 `/<runtime>/<sequence>.json`. `current.json` is byte-identical to the latest
@@ -26,7 +25,6 @@ this repository. Store exactly these environment secrets there:
 
 - `COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM`
 - `COMPATIBILITY_GROK_PRIVATE_KEY_PEM`
-- `COMPATIBILITY_OPENCLAW_PRIVATE_KEY_PEM`
 
 Each value is a distinct PEM-encoded Ed25519 private key. Generate and retain
 the keys in the organization-controlled secret manager before copying them to
@@ -47,7 +45,6 @@ Set only these public Cave repository secrets:
 | --- | --- | --- | --- |
 | OpenCode | `OPENCODE_SCHEMA_REGISTRY_URL` | `OPENCODE_SCHEMA_REGISTRY_PUBLIC_KEY` | `OPENCODE_SCHEMA_REGISTRY_CHECKPOINT` |
 | Grok | `GROK_SCHEMA_REGISTRY_URL` | `GROK_SCHEMA_REGISTRY_PUBLIC_KEY` | `GROK_SCHEMA_REGISTRY_CHECKPOINT` |
-| OpenClaw | `OPENCLAW_SCHEMA_REGISTRY_URL` | `OPENCLAW_SCHEMA_REGISTRY_PUBLIC_KEY` | `OPENCLAW_SCHEMA_REGISTRY_CHECKPOINT` |
 
 The checkpoint is exactly `{ "sequence": <number>, "payloadHash":
 "<lowercase sha256>" }`. Sequence one is the pinned Cave baseline and has no
@@ -56,7 +53,7 @@ source for the higher sequence and use the corresponding `*_PUBLIC_KEYS`
 secret with one to four named keys. Retain the previous public key until all
 supported Cave releases have moved beyond it.
 
-Before a Cave release, fetch all public endpoints without following redirects,
+Before a Cave release, fetch both public endpoints without following redirects,
 verify their signatures with the public keys, compare their payload hashes to
 the checkpoints, and run Cave’s two release guard scripts. A missing key,
 non-HTTPS URL, redirect, invalid signature, expired bundle, or checkpoint
