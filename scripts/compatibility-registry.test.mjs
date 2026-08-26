@@ -407,9 +407,15 @@ try {
 const {
   CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL,
   hydrateCompatibilityRegistrySite,
+  parseHydrationCliArgs,
 } = hydrationModule;
 assert.equal(typeof hydrateCompatibilityRegistrySite, "function");
+assert.equal(typeof parseHydrationCliArgs, "function");
 assert.equal(CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL, "https://opencoven.github.io/coven-runtimes");
+assert.deepEqual(parseHydrationCliArgs([]), { allowBootstrap404: false });
+assert.deepEqual(parseHydrationCliArgs(["--allow-bootstrap-404"]), {
+  allowBootstrap404: true,
+});
 
 function fakeResponse(url, status, body, { redirected = false } = {}) {
   return {
@@ -438,7 +444,25 @@ function checkpointRequestUrl(cacheBust) {
   return url.href;
 }
 
-const firstDeploymentOutput = path.join(scratch, "hydrated-first-deployment");
+const default404CacheBust = "deterministic-default-404-run";
+await assert.rejects(
+  () =>
+    hydrateCompatibilityRegistrySite({
+      output: path.join(scratch, "hydrated-default-404-rejected"),
+      fetchImpl: fakeRegistryFetch(
+        new Map([
+          [
+            checkpointRequestUrl(default404CacheBust),
+            { status: 404, body: "not found" },
+          ],
+        ]),
+      ),
+      checkpointCacheBust: () => default404CacheBust,
+    }),
+  /checkpoints.*status 404/i,
+);
+
+const firstDeploymentOutput = path.join(scratch, "hydrated-authorized-first-deployment");
 const firstDeploymentCalls = [];
 const firstDeploymentCacheBust = "deterministic-first-deployment-run";
 const firstDeploymentCheckpoints = await hydrateCompatibilityRegistrySite({
@@ -453,6 +477,7 @@ const firstDeploymentCheckpoints = await hydrateCompatibilityRegistrySite({
     firstDeploymentCalls,
   ),
   checkpointCacheBust: () => firstDeploymentCacheBust,
+  allowBootstrap404: true,
 });
 assert.deepEqual(firstDeploymentCheckpoints, {});
 assert.deepEqual(JSON.parse(await readFile(path.join(firstDeploymentOutput, "checkpoints.json"), "utf8")), {});
@@ -477,6 +502,7 @@ await hydrateCompatibilityRegistrySite({
     secondHydrationCalls,
   ),
   checkpointCacheBust: () => secondHydrationCacheBust,
+  allowBootstrap404: true,
 });
 assert.notEqual(secondHydrationCalls[0].url, firstDeploymentCalls[0].url);
 
@@ -668,6 +694,7 @@ for (const fixture of [
         output: path.join(scratch, fixture.name),
         fetchImpl: fakeRegistryFetch(fixture.routes),
         checkpointCacheBust: () => fixture.cacheBust,
+        allowBootstrap404: true,
       }),
     fixture.error,
   );
@@ -687,6 +714,11 @@ const hydrationCommandIndex = workflow.indexOf("node scripts/hydrate-compatibili
 const buildCommandIndex = workflow.indexOf("node scripts/build-compatibility-registry-site.mjs");
 assert.ok(hydrationCommandIndex >= 0, "publisher workflow must hydrate immutable history");
 assert.ok(hydrationCommandIndex < buildCommandIndex, "publisher workflow must hydrate before signing");
+assert.doesNotMatch(
+  workflow,
+  /--allow-bootstrap-404/,
+  "production publisher workflow must never authorize bootstrap",
+);
 const hydrationSource = readFileSync(
   new URL("./hydrate-compatibility-registry-site.mjs", import.meta.url),
   "utf8",
@@ -708,6 +740,11 @@ assert.match(runbook, /hydrate/i);
 assert.match(runbook, /byte-for-byte/i);
 assert.match(runbook, /key rotation/i);
 assert.match(runbook, /actual 404/i);
+assert.match(runbook, /already has published OpenCode and Grok history/i);
+assert.match(runbook, /--allow-bootstrap-404/);
+assert.match(runbook, /truly new Pages deployment/i);
+assert.match(runbook, /remove.*immediately after the first publication/i);
+assert.match(runbook, /never.*recovery/i);
 assert.match(runbook, /redirect/i);
 assert.match(runbook, /fail closed/i);
 

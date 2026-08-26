@@ -52,11 +52,28 @@ following a redirect. Immutable sequence URLs remain stable and cacheable. The
 hydrator validates the runtime allowlist and checkpoint fields, then fetches
 every immutable sequence from one through each checkpoint. Missing sequence
 files, redirects, network or TLS failures, malformed checkpoints, unknown
-runtimes, and non-success responses all fail closed before signing. Only an
-actual 404 from the cache-busted canonical `checkpoints.json` request admits a
-first-ever deployment. A partial production checkpoint is valid: for example,
-existing OpenCode and Grok histories can be hydrated while OpenClaw publishes
-its genesis.
+runtimes, and non-success responses all fail closed before signing. A 404 from
+the cache-busted canonical `checkpoints.json` request also fails closed by
+default.
+
+This repository already has published OpenCode and Grok history, so the normal
+publisher workflow must never authorize bootstrap. A partial production
+checkpoint is valid: the existing OpenCode and Grok histories are hydrated
+while OpenClaw publishes its genesis. Never use bootstrap authorization for recovery
+from an outage, Pages misconfiguration, missing history, or a failed
+publication.
+
+Only a truly new Pages deployment with no published registry history may use
+the one-time CLI authorization:
+
+```sh
+node scripts/hydrate-compatibility-registry-site.mjs --allow-bootstrap-404
+```
+
+The flag authorizes only an actual 404 from the canonical `checkpoints.json`
+request. Redirects, network failures, malformed responses, and every other
+status remain fatal. Remove the flag immediately after the first publication;
+all later runs must use the normal bootstrap-disabled command.
 
 The builder validates every hydrated file as a signed Ed25519 bundle and binds
 each source directory to its payload runtime (`opencode`, `grok-build`, or

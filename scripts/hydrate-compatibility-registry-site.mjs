@@ -81,16 +81,33 @@ function writeBytes(file, bytes) {
   writeFileSync(file, bytes);
 }
 
+export function parseHydrationCliArgs(args) {
+  if (!Array.isArray(args) || args.some((argument) => typeof argument !== "string")) {
+    throw new TypeError("compatibility registry hydration CLI arguments must be strings");
+  }
+  if (args.length === 0) return { allowBootstrap404: false };
+  if (args.length === 1 && args[0] === "--allow-bootstrap-404") {
+    return { allowBootstrap404: true };
+  }
+  throw new TypeError(
+    "compatibility registry hydration accepts only the one-time --allow-bootstrap-404 flag",
+  );
+}
+
 export async function hydrateCompatibilityRegistrySite({
   output,
   fetchImpl = globalThis.fetch,
   checkpointCacheBust = randomUUID,
+  allowBootstrap404 = false,
 }) {
   if (typeof fetchImpl !== "function") {
     throw new TypeError("compatibility registry hydration requires a fetch implementation");
   }
   if (typeof checkpointCacheBust !== "function") {
     throw new TypeError("compatibility registry hydration requires a checkpoint cache-bust factory");
+  }
+  if (typeof allowBootstrap404 !== "boolean") {
+    throw new TypeError("compatibility registry bootstrap authorization must be a boolean");
   }
   assertEmptyStagingDirectory(output);
 
@@ -103,7 +120,7 @@ export async function hydrateCompatibilityRegistrySite({
   );
   checkpointUrl.searchParams.set("hydration", cacheBust);
   const checkpointBytes = await fetchCanonicalBytes(fetchImpl, checkpointUrl.href, "checkpoints", {
-    allowNotFound: true,
+    allowNotFound: allowBootstrap404,
     noCache: true,
   });
   if (checkpointBytes === null) {
@@ -134,5 +151,9 @@ export async function hydrateCompatibilityRegistrySite({
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const root = fileURLToPath(new URL("..", import.meta.url));
-  await hydrateCompatibilityRegistrySite({ output: path.join(root, "site") });
+  const { allowBootstrap404 } = parseHydrationCliArgs(process.argv.slice(2));
+  await hydrateCompatibilityRegistrySite({
+    output: path.join(root, "site"),
+    allowBootstrap404,
+  });
 }
