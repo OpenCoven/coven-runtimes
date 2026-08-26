@@ -8,6 +8,32 @@ import { canonicalPayload, payloadHash, readUnsignedBundle, signBundle } from ".
 import { buildCompatibilityRegistrySite } from "./build-compatibility-registry-site.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
+const publicationModule = await import("./compatibility-registry-publication.mjs");
+const {
+  COMPATIBILITY_REGISTRY_PUBLICATION_STATE_RELATIVE_PATH,
+  readCompatibilityRegistryPublicationState,
+  validateCompatibilityRegistryCheckpoints,
+  validateCompatibilityRegistryPublicationState,
+} = publicationModule;
+assert.equal(typeof readCompatibilityRegistryPublicationState, "function");
+assert.equal(typeof validateCompatibilityRegistryPublicationState, "function");
+assert.equal(typeof validateCompatibilityRegistryCheckpoints, "function");
+assert.equal(
+  COMPATIBILITY_REGISTRY_PUBLICATION_STATE_RELATIVE_PATH,
+  "registry/compatibility/publication-state.json",
+);
+const expectedPublicationState = {
+  publishedSequenceFloors: {
+    opencode: 1,
+    grok: 1,
+  },
+  authorizedGenesisRuntimes: ["openclaw"],
+};
+const allGenesisPublicationState = {
+  publishedSequenceFloors: {},
+  authorizedGenesisRuntimes: ["opencode", "grok", "openclaw"],
+};
+assert.deepEqual(readCompatibilityRegistryPublicationState(root), expectedPublicationState);
 const scratchParent = path.join(root, "scratch");
 mkdirSync(scratchParent, { recursive: true });
 const scratch = mkdtempSync(path.join(scratchParent, "compatibility-registry-test-"));
@@ -51,8 +77,15 @@ function writeJson(file, value, spaces = 2) {
   writeFileSync(file, `${JSON.stringify(value, null, spaces)}\n`);
 }
 
-function createSourceFixture(name, sources) {
+function createSourceFixture(name, sources, publicationState) {
   const fixtureRoot = path.join(scratch, name);
+  writeJson(
+    path.join(
+      fixtureRoot,
+      COMPATIBILITY_REGISTRY_PUBLICATION_STATE_RELATIVE_PATH,
+    ),
+    publicationState,
+  );
   for (const [directory, bundles] of Object.entries(sources)) {
     for (const bundle of bundles) {
       writeJson(path.join(fixtureRoot, "registry", "compatibility", directory, `${bundle.sequence}.json`), bundle);
@@ -77,6 +110,98 @@ function stageHistory(output, histories) {
   writeJson(path.join(output, "checkpoints.json"), checkpoints);
   return checkpoints;
 }
+
+assert.deepEqual(
+  validateCompatibilityRegistryPublicationState(structuredClone(expectedPublicationState)),
+  expectedPublicationState,
+);
+for (const [state, error] of [
+  [null, /publication state must be an object/i],
+  [{}, /exactly.*publishedSequenceFloors.*authorizedGenesisRuntimes/i],
+  [
+    {
+      ...expectedPublicationState,
+      publishedSequenceFloors: [],
+    },
+    /published sequence floors must be an object/i,
+  ],
+  [
+    {
+      ...expectedPublicationState,
+      publishedSequenceFloors: { opencode: 0, grok: 1 },
+    },
+    /floor.*opencode.*safe integer/i,
+  ],
+  [
+    {
+      ...expectedPublicationState,
+      publishedSequenceFloors: {
+        opencode: Number.MAX_SAFE_INTEGER + 1,
+        grok: 1,
+      },
+    },
+    /floor.*opencode.*safe integer/i,
+  ],
+  [
+    {
+      ...expectedPublicationState,
+      publishedSequenceFloors: { opencode: 1, grok: 1, unknown: 1 },
+    },
+    /unknown runtime unknown/i,
+  ],
+  [
+    {
+      ...expectedPublicationState,
+      authorizedGenesisRuntimes: ["openclaw", "unknown"],
+    },
+    /unknown runtime unknown/i,
+  ],
+  [
+    {
+      ...expectedPublicationState,
+      authorizedGenesisRuntimes: ["openclaw", "openclaw"],
+    },
+    /duplicate.*openclaw/i,
+  ],
+  [
+    {
+      publishedSequenceFloors: { opencode: 1, grok: 1, openclaw: 1 },
+      authorizedGenesisRuntimes: ["openclaw"],
+    },
+    /overlap.*openclaw/i,
+  ],
+  [
+    {
+      publishedSequenceFloors: { opencode: 1, grok: 1 },
+      authorizedGenesisRuntimes: [],
+    },
+    /does not classify runtime openclaw/i,
+  ],
+]) {
+  assert.throws(() => validateCompatibilityRegistryPublicationState(state), error);
+}
+
+const malformedPublicationStateRoot = path.join(scratch, "malformed-publication-state");
+mkdirSync(
+  path.dirname(
+    path.join(
+      malformedPublicationStateRoot,
+      COMPATIBILITY_REGISTRY_PUBLICATION_STATE_RELATIVE_PATH,
+    ),
+  ),
+  { recursive: true },
+);
+writeFileSync(
+  path.join(
+    malformedPublicationStateRoot,
+    COMPATIBILITY_REGISTRY_PUBLICATION_STATE_RELATIVE_PATH,
+  ),
+  "{not-json}\n",
+);
+assert.throws(
+  () => readCompatibilityRegistryPublicationState(malformedPublicationStateRoot),
+  /publication state is malformed/i,
+);
 
 const opencode = readSource("registry/compatibility/opencode/1.json");
 const grok = readSource("registry/compatibility/grok/1.json");
@@ -142,7 +267,11 @@ assert.deepEqual(readUnsignedBundle(path.join(root, "registry/compatibility/grok
 
 const grokKey = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const output = path.join(scratch, "fresh-site");
-writeJson(path.join(output, "checkpoints.json"), {});
+const initialSignedGrok = signBundle(grok, grokKey);
+stageHistory(output, {
+  opencode: [{ bundle: signedOpenCode, bytes: `${JSON.stringify(signedOpenCode)}\n` }],
+  grok: [{ bundle: initialSignedGrok, bytes: `${JSON.stringify(initialSignedGrok)}\n` }],
+});
 const checkpoints = buildCompatibilityRegistrySite({
   root,
   output,
@@ -179,7 +308,7 @@ const wrongRuntimeRoot = createSourceFixture("wrong-runtime-source", {
   opencode: [{ ...openclaw }],
   grok: [grok],
   openclaw: [openclaw],
-});
+}, allGenesisPublicationState);
 const wrongRuntimeOutput = path.join(scratch, "wrong-runtime-output");
 writeJson(path.join(wrongRuntimeOutput, "checkpoints.json"), {});
 assert.throws(
@@ -235,6 +364,9 @@ const successorRoot = createSourceFixture("rotation-successor-source", {
   opencode: [opencode, successorOpenCode],
   grok: [grok],
   openclaw: [openclaw],
+}, {
+  publishedSequenceFloors: { opencode: 1 },
+  authorizedGenesisRuntimes: ["grok", "openclaw"],
 });
 const successorOutput = path.join(scratch, "rotation-successor-site");
 stageHistory(successorOutput, {
@@ -301,6 +433,7 @@ for (const fixture of [
     name: "checkpoint-drift",
     histories: {
       opencode: [{ bundle: oldSignedOpenCode, bytes: oldOpenCodeBytes, checkpointHash: "a".repeat(64) }],
+      grok: [{ bundle: oldSignedGrok, bytes: oldGrokBytes }],
     },
     error: /checkpoint.*payload hash/i,
   },
@@ -308,6 +441,7 @@ for (const fixture of [
     name: "malformed-signature",
     histories: {
       opencode: [{ bundle: opencode, bytes: `${JSON.stringify(opencode)}\n` }],
+      grok: [{ bundle: oldSignedGrok, bytes: oldGrokBytes }],
     },
     error: /signature/i,
   },
@@ -334,6 +468,7 @@ const driftedOpenCode = signBundle(
 );
 stageHistory(sourceDriftOutput, {
   opencode: [{ bundle: driftedOpenCode, bytes: `${JSON.stringify(driftedOpenCode)}\n` }],
+  grok: [{ bundle: oldSignedGrok, bytes: oldGrokBytes }],
 });
 assert.throws(
   () =>
@@ -350,7 +485,10 @@ assert.throws(
 const missingHistoryOutput = path.join(scratch, "missing-history");
 writeJson(path.join(missingHistoryOutput, "checkpoints.json"), {
   opencode: { sequence: 1, payloadHash: payloadHash(oldSignedOpenCode) },
+  grok: { sequence: 1, payloadHash: payloadHash(oldSignedGrok) },
 });
+mkdirSync(path.join(missingHistoryOutput, "grok"), { recursive: true });
+writeFileSync(path.join(missingHistoryOutput, "grok/1.json"), oldGrokBytes);
 assert.throws(
   () =>
     buildCompatibilityRegistrySite({
@@ -363,6 +501,11 @@ assert.throws(
   /missing historical.*opencode.*1/i,
 );
 
+const unexpectedHistoryRoot = createSourceFixture("unexpected-history-source", {
+  opencode: [opencode],
+  grok: [grok],
+  openclaw: [openclaw],
+}, allGenesisPublicationState);
 const unexpectedHistoryOutput = path.join(scratch, "unexpected-history");
 writeJson(path.join(unexpectedHistoryOutput, "checkpoints.json"), {});
 mkdirSync(path.join(unexpectedHistoryOutput, "opencode"), { recursive: true });
@@ -370,7 +513,7 @@ writeFileSync(path.join(unexpectedHistoryOutput, "opencode/1.json"), oldOpenCode
 assert.throws(
   () =>
     buildCompatibilityRegistrySite({
-      root,
+      root: unexpectedHistoryRoot,
       output: unexpectedHistoryOutput,
       opencodePrivateKeyPem: privateKeyPem,
       grokPrivateKeyPem: grokKey,
@@ -383,7 +526,7 @@ const gappedRoot = createSourceFixture("gapped-source", {
   opencode: [opencode, { ...opencode, sequence: 3 }],
   grok: [grok],
   openclaw: [openclaw],
-});
+}, allGenesisPublicationState);
 const gappedOutput = path.join(scratch, "gapped-output");
 writeJson(path.join(gappedOutput, "checkpoints.json"), {});
 assert.throws(
@@ -510,6 +653,58 @@ const productionCheckpoint = {
   opencode: { sequence: 1, payloadHash: payloadHash(oldSignedOpenCode) },
   grok: { sequence: 1, payloadHash: payloadHash(oldSignedGrok) },
 };
+assert.deepEqual(
+  validateCompatibilityRegistryCheckpoints(
+    structuredClone(productionCheckpoint),
+    expectedPublicationState,
+  ),
+  productionCheckpoint,
+  "OpenClaw may be omitted only while tracked as authorized genesis",
+);
+assert.throws(
+  () =>
+    validateCompatibilityRegistryCheckpoints(
+      { grok: productionCheckpoint.grok },
+      expectedPublicationState,
+    ),
+  /opencode.*published floor.*1/i,
+);
+assert.throws(
+  () =>
+    validateCompatibilityRegistryCheckpoints(
+      { opencode: productionCheckpoint.opencode },
+      expectedPublicationState,
+    ),
+  /grok.*published floor.*1/i,
+);
+assert.throws(
+  () =>
+    validateCompatibilityRegistryCheckpoints(productionCheckpoint, {
+        publishedSequenceFloors: { opencode: 2, grok: 1 },
+        authorizedGenesisRuntimes: ["openclaw"],
+      }),
+    /opencode.*published floor.*2/i,
+);
+assert.throws(
+    () =>
+      validateCompatibilityRegistryCheckpoints(productionCheckpoint, {
+      publishedSequenceFloors: { opencode: 1, grok: 1, openclaw: 1 },
+      authorizedGenesisRuntimes: [],
+    }),
+  /openclaw.*published floor.*1/i,
+  "removing OpenClaw genesis authorization requires its published checkpoint",
+);
+assert.throws(
+  () =>
+    validateCompatibilityRegistryCheckpoints(
+      {
+        ...productionCheckpoint,
+        openclaw: { sequence: 1, payloadHash: "a".repeat(64) },
+      },
+      expectedPublicationState,
+    ),
+  /openclaw.*authorized genesis.*already published/i,
+);
 const hydratedProductionOutput = path.join(scratch, "hydrated-production");
 const productionHydrationCalls = [];
 const productionCacheBust = "deterministic-production-run";
@@ -562,6 +757,29 @@ assert.equal(
   await readFile(path.join(hydratedProductionOutput, "openclaw/current.json"), "utf8"),
   await readFile(path.join(hydratedProductionOutput, "openclaw/1.json"), "utf8"),
 );
+
+for (const [runtime, checkpoint] of [
+  ["opencode", { grok: productionCheckpoint.grok }],
+  ["grok", { opencode: productionCheckpoint.opencode }],
+]) {
+  const cacheBust = `missing-${runtime}-floor-run`;
+  await assert.rejects(
+    () =>
+      hydrateCompatibilityRegistrySite({
+        output: path.join(scratch, `missing-${runtime}-floor`),
+        fetchImpl: fakeRegistryFetch(
+          new Map([
+            [
+              checkpointRequestUrl(cacheBust),
+              { status: 200, body: `${JSON.stringify(checkpoint)}\n` },
+            ],
+          ]),
+        ),
+        checkpointCacheBust: () => cacheBust,
+      }),
+    new RegExp(`${runtime}.*published floor.*1`, "i"),
+  );
+}
 
 for (const fixture of [
   {
@@ -677,6 +895,7 @@ for (const fixture of [
           status: 200,
           body: JSON.stringify({
             opencode: { sequence: 2, payloadHash: "a".repeat(64) },
+            grok: productionCheckpoint.grok,
           }),
         },
       ],
@@ -699,6 +918,29 @@ for (const fixture of [
     fixture.error,
   );
 }
+
+const unknownSourceRoot = createSourceFixture("unknown-source", {
+  opencode: [opencode],
+  grok: [grok],
+  openclaw: [openclaw],
+}, allGenesisPublicationState);
+writeJson(
+  path.join(unknownSourceRoot, "registry/compatibility/unknown/1.json"),
+  opencode,
+);
+const unknownSourceOutput = path.join(scratch, "unknown-source-output");
+writeJson(path.join(unknownSourceOutput, "checkpoints.json"), {});
+assert.throws(
+  () =>
+    buildCompatibilityRegistrySite({
+      root: unknownSourceRoot,
+      output: unknownSourceOutput,
+      opencodePrivateKeyPem: privateKeyPem,
+      grokPrivateKeyPem: grokKey,
+      openclawPrivateKeyPem,
+    }),
+  /unexpected compatibility registry source entry unknown/i,
+);
 
 const workflow = readFileSync(new URL("../.github/workflows/publish-compatibility-registry.yml", import.meta.url), "utf8");
 assert.match(workflow, /workflow_dispatch/);
@@ -724,6 +966,20 @@ const hydrationSource = readFileSync(
   "utf8",
 );
 assert.doesNotMatch(hydrationSource, /PRIVATE_KEY|process\.env/, "hydration must not receive signing material");
+assert.match(
+  hydrationSource,
+  /readCompatibilityRegistryPublicationState/,
+  "hydration must load the tracked publication state automatically",
+);
+const buildSource = readFileSync(
+  new URL("./build-compatibility-registry-site.mjs", import.meta.url),
+  "utf8",
+);
+assert.match(
+  buildSource,
+  /readCompatibilityRegistryPublicationState/,
+  "build must load the tracked publication state automatically",
+);
 
 const ci = readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 assert.match(ci, /Compatibility registry/);
@@ -747,5 +1003,11 @@ assert.match(runbook, /remove.*immediately after the first publication/i);
 assert.match(runbook, /never.*recovery/i);
 assert.match(runbook, /redirect/i);
 assert.match(runbook, /fail closed/i);
+assert.match(runbook, /publication-state\.json/);
+assert.match(runbook, /authorizes OpenClaw genesis once/i);
+assert.match(runbook, /immediately after successful Pages deployment/i);
+assert.match(runbook, /openclaw.*1/i);
+assert.match(runbook, /remove OpenClaw from genesis authorization/i);
+assert.match(runbook, /never leave a deployed runtime genesis-authorized/i);
 
 console.log("compatibility registry source contracts: pass");

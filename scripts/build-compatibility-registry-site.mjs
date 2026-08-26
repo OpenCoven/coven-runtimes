@@ -16,6 +16,8 @@ import {
 } from "./compatibility-registry.mjs";
 import {
   COMPATIBILITY_REGISTRY_PUBLISHERS,
+  COMPATIBILITY_REGISTRY_PUBLICATION_STATE_RELATIVE_PATH,
+  readCompatibilityRegistryPublicationState,
   validateCompatibilityRegistryCheckpoints,
 } from "./compatibility-registry-publication.mjs";
 
@@ -38,7 +40,7 @@ function writeBytes(file, bytes) {
   writeFileSync(file, bytes);
 }
 
-function readHydratedCheckpoints(output) {
+function readHydratedCheckpoints(output, publicationState) {
   const checkpointFile = path.join(output, "checkpoints.json");
   if (!existsSync(checkpointFile)) {
     throw new Error("compatibility registry staging is missing hydrated checkpoints.json");
@@ -49,7 +51,34 @@ function readHydratedCheckpoints(output) {
   } catch (error) {
     throw new TypeError(`compatibility registry hydrated checkpoints are malformed: ${error.message}`);
   }
-  return validateCompatibilityRegistryCheckpoints(checkpoints);
+  return validateCompatibilityRegistryCheckpoints(checkpoints, publicationState);
+}
+
+function validateSourceInventory(root, publicationState) {
+  const compatibilityRoot = path.join(root, "registry", "compatibility");
+  const classifiedRuntimes = new Set([
+    ...Object.keys(publicationState.publishedSequenceFloors),
+    ...publicationState.authorizedGenesisRuntimes,
+  ]);
+  const allowedDirectories = new Set(
+    COMPATIBILITY_REGISTRY_PUBLISHERS
+      .filter(({ name }) => classifiedRuntimes.has(name))
+      .map(({ source }) => source),
+  );
+  const publicationStateFile = path.basename(
+    COMPATIBILITY_REGISTRY_PUBLICATION_STATE_RELATIVE_PATH,
+  );
+
+  for (const entry of readdirSync(compatibilityRoot, { withFileTypes: true })) {
+    const allowed =
+      (entry.isFile() && entry.name === publicationStateFile) ||
+      (entry.isDirectory() && allowedDirectories.has(entry.name));
+    if (!allowed) {
+      throw new Error(
+        `unexpected compatibility registry source entry ${entry.name}`,
+      );
+    }
+  }
 }
 
 function collectStagingEntries(directory, relative = "") {
@@ -188,7 +217,9 @@ function prepareRuntime(root, output, publisher, checkpoint) {
 }
 
 export function buildCompatibilityRegistrySite({ root, output, ...keys }) {
-  const hydratedCheckpoints = readHydratedCheckpoints(output);
+  const publicationState = readCompatibilityRegistryPublicationState(root);
+  const hydratedCheckpoints = readHydratedCheckpoints(output, publicationState);
+  validateSourceInventory(root, publicationState);
   validateStagingInventory(output, hydratedCheckpoints);
 
   const plans = COMPATIBILITY_REGISTRY_PUBLISHERS.map((publisher) =>

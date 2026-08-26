@@ -58,10 +58,30 @@ default.
 
 This repository already has published OpenCode and Grok history, so the normal
 publisher workflow must never authorize bootstrap. A partial production
-checkpoint is valid: the existing OpenCode and Grok histories are hydrated
-while OpenClaw publishes its genesis. Never use bootstrap authorization for recovery
-from an outage, Pages misconfiguration, missing history, or a failed
-publication.
+checkpoint is valid only when it matches the tracked
+`registry/compatibility/publication-state.json` contract. That file records
+minimum published sequence floors and a disjoint, closed allowlist of runtimes
+authorized for one genesis publication. The publisher loads it automatically;
+there are no workflow or caller inputs that can weaken it. Every floor runtime
+must appear in a successful canonical checkpoint response at or above its
+floor. An absent runtime is accepted only when the file explicitly authorizes
+its genesis, and a genesis-authorized runtime must not already appear in the
+canonical checkpoints.
+
+This feature PR authorizes OpenClaw genesis once. OpenCode and Grok each have a
+published floor of sequence 1, while OpenClaw is the sole authorized genesis
+runtime. Therefore a successful checkpoint response that omits OpenCode or Grok
+fails before any history is signed, while the current omission of OpenClaw is
+accepted.
+
+Immediately after successful Pages deployment of OpenClaw sequence 1, open a
+follow-up state-finalization PR. In that PR, add `"openclaw": 1` to
+`publishedSequenceFloors` and remove OpenClaw from genesis authorization. Merge
+it before dispatching the publisher again.
+Never leave a deployed runtime genesis-authorized.
+
+Never use bootstrap authorization for recovery from an outage, Pages
+misconfiguration, missing history, or a failed publication.
 
 Only a truly new Pages deployment with no published registry history may use
 the one-time CLI authorization:

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 const PUBLISHERS = [
   {
     name: "opencode",
@@ -23,13 +26,122 @@ export const COMPATIBILITY_REGISTRY_PUBLISHERS = Object.freeze(
   PUBLISHERS.map((publisher) => Object.freeze(publisher)),
 );
 
+export const COMPATIBILITY_REGISTRY_PUBLICATION_STATE_RELATIVE_PATH =
+  "registry/compatibility/publication-state.json";
+
 const PUBLISHER_NAMES = new Set(PUBLISHERS.map(({ name }) => name));
+const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 
 function isRecord(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
-export function validateCompatibilityRegistryCheckpoints(value) {
+export function validateCompatibilityRegistryPublicationState(value) {
+  if (!isRecord(value)) {
+    throw new TypeError("compatibility registry publication state must be an object");
+  }
+  const keys = Object.keys(value).sort();
+  const expectedKeys = [
+    "authorizedGenesisRuntimes",
+    "publishedSequenceFloors",
+  ];
+  if (
+    keys.length !== expectedKeys.length ||
+    keys.some((key, index) => key !== expectedKeys[index])
+  ) {
+    throw new TypeError(
+      "compatibility registry publication state must contain exactly publishedSequenceFloors and authorizedGenesisRuntimes",
+    );
+  }
+
+  const { publishedSequenceFloors, authorizedGenesisRuntimes } = value;
+  if (!isRecord(publishedSequenceFloors)) {
+    throw new TypeError(
+      "compatibility registry published sequence floors must be an object",
+    );
+  }
+  if (!Array.isArray(authorizedGenesisRuntimes)) {
+    throw new TypeError(
+      "compatibility registry authorized genesis runtimes must be an array",
+    );
+  }
+
+  const classifiedRuntimes = new Set();
+  for (const [runtime, floor] of Object.entries(publishedSequenceFloors)) {
+    if (!PUBLISHER_NAMES.has(runtime)) {
+      throw new TypeError(
+        `compatibility registry publication state contains unknown runtime ${runtime}`,
+      );
+    }
+    if (!Number.isSafeInteger(floor) || floor < 1) {
+      throw new TypeError(
+        `compatibility registry publication floor for ${runtime} must be a positive safe integer`,
+      );
+    }
+    classifiedRuntimes.add(runtime);
+  }
+
+  const genesisRuntimes = new Set();
+  for (const runtime of authorizedGenesisRuntimes) {
+    if (typeof runtime !== "string" || !PUBLISHER_NAMES.has(runtime)) {
+      throw new TypeError(
+        `compatibility registry publication state contains unknown runtime ${String(runtime)}`,
+      );
+    }
+    if (genesisRuntimes.has(runtime)) {
+      throw new TypeError(
+        `compatibility registry publication state contains duplicate authorized genesis runtime ${runtime}`,
+      );
+    }
+    if (classifiedRuntimes.has(runtime)) {
+      throw new TypeError(
+        `compatibility registry publication state has floor/genesis overlap for ${runtime}`,
+      );
+    }
+    genesisRuntimes.add(runtime);
+    classifiedRuntimes.add(runtime);
+  }
+
+  for (const runtime of PUBLISHER_NAMES) {
+    if (!classifiedRuntimes.has(runtime)) {
+      throw new TypeError(
+        `compatibility registry publication state does not classify runtime ${runtime}`,
+      );
+    }
+  }
+  return value;
+}
+
+export function readCompatibilityRegistryPublicationState(root) {
+  const file = path.join(
+    root,
+    COMPATIBILITY_REGISTRY_PUBLICATION_STATE_RELATIVE_PATH,
+  );
+  let bytes;
+  try {
+    bytes = readFileSync(file);
+  } catch (error) {
+    throw new Error(
+      `compatibility registry publication state could not be read: ${error.message}`,
+    );
+  }
+
+  let state;
+  try {
+    state = JSON.parse(UTF8_DECODER.decode(bytes));
+  } catch (error) {
+    throw new TypeError(
+      `compatibility registry publication state is malformed: ${error.message}`,
+    );
+  }
+  return validateCompatibilityRegistryPublicationState(state);
+}
+
+export function validateCompatibilityRegistryCheckpoints(
+  value,
+  publicationState,
+) {
+  const state = validateCompatibilityRegistryPublicationState(publicationState);
   if (!isRecord(value)) {
     throw new TypeError("compatibility registry checkpoints must be an object");
   }
@@ -46,6 +158,24 @@ export function validateCompatibilityRegistryCheckpoints(value) {
       !/^[a-f0-9]{64}$/.test(checkpoint.payloadHash)
     ) {
       throw new TypeError(`compatibility registry checkpoint for ${runtime} is malformed`);
+    }
+  }
+
+  for (const [runtime, floor] of Object.entries(
+    state.publishedSequenceFloors,
+  )) {
+    const checkpoint = value[runtime];
+    if (!checkpoint || checkpoint.sequence < floor) {
+      throw new TypeError(
+        `compatibility registry checkpoint for ${runtime} does not satisfy published floor ${floor}`,
+      );
+    }
+  }
+  for (const runtime of state.authorizedGenesisRuntimes) {
+    if (Object.hasOwn(value, runtime)) {
+      throw new TypeError(
+        `compatibility registry runtime ${runtime} is authorized genesis but already published in checkpoints`,
+      );
     }
   }
   return value;

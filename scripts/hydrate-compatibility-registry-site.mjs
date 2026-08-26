@@ -2,7 +2,10 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { validateCompatibilityRegistryCheckpoints } from "./compatibility-registry-publication.mjs";
+import {
+  readCompatibilityRegistryPublicationState,
+  validateCompatibilityRegistryCheckpoints,
+} from "./compatibility-registry-publication.mjs";
 
 export const CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL =
   "https://opencoven.github.io/coven-runtimes";
@@ -60,20 +63,24 @@ async function fetchCanonicalBytes(
   }
 }
 
-function parseCheckpoints(bytes) {
+function parseCheckpoints(bytes, publicationState) {
   let checkpoints;
   try {
     checkpoints = JSON.parse(UTF8_DECODER.decode(bytes));
   } catch (error) {
     throw new TypeError(`canonical compatibility registry checkpoints are malformed: ${error.message}`);
   }
-  const validated = validateCompatibilityRegistryCheckpoints(checkpoints);
-  if (Object.keys(validated).length === 0) {
+  if (
+    checkpoints &&
+    typeof checkpoints === "object" &&
+    !Array.isArray(checkpoints) &&
+    Object.keys(checkpoints).length === 0
+  ) {
     throw new TypeError(
       "canonical compatibility registry checkpoints are empty; first deployment requires an actual 404",
     );
   }
-  return validated;
+  return validateCompatibilityRegistryCheckpoints(checkpoints, publicationState);
 }
 
 function writeBytes(file, bytes) {
@@ -109,6 +116,8 @@ export async function hydrateCompatibilityRegistrySite({
   if (typeof allowBootstrap404 !== "boolean") {
     throw new TypeError("compatibility registry bootstrap authorization must be a boolean");
   }
+  const root = fileURLToPath(new URL("..", import.meta.url));
+  const publicationState = readCompatibilityRegistryPublicationState(root);
   assertEmptyStagingDirectory(output);
 
   const cacheBust = checkpointCacheBust();
@@ -128,7 +137,7 @@ export async function hydrateCompatibilityRegistrySite({
     return {};
   }
 
-  const checkpoints = parseCheckpoints(checkpointBytes);
+  const checkpoints = parseCheckpoints(checkpointBytes, publicationState);
   const historicalFiles = [];
   for (const [runtime, checkpoint] of Object.entries(checkpoints)) {
     for (let sequence = 1; sequence <= checkpoint.sequence; sequence += 1) {

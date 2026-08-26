@@ -1,0 +1,9 @@
+{
+  "publishedSequenceFloors": {
+    "opencode": 1,
+    "grok": 1
+  },
+  "authorizedGenesisRuntimes": [
+    "openclaw"
+  ]
+}
