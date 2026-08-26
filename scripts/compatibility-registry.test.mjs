@@ -156,7 +156,10 @@ assert.match(ci, /node scripts\/compatibility-registry\.test\.mjs/);
 
 const runbook = readFileSync(new URL("../docs/compatibility-registry-publisher.md", import.meta.url), "utf8");
 assert.match(runbook, /opencoven\.github\.io\/coven-runtimes\/opencode\/current\.json/);
+assert.match(runbook, /opencoven\.github\.io\/coven-runtimes\/openclaw\/current\.json/);
+assert.match(runbook, /COMPATIBILITY_OPENCLAW_PRIVATE_KEY_PEM/);
 assert.match(runbook, /OPENCODE_SCHEMA_REGISTRY_CHECKPOINT/);
 assert.match(runbook, /GROK_SCHEMA_REGISTRY_CHECKPOINT/);
+assert.match(runbook, /OPENCLAW_SCHEMA_REGISTRY_CHECKPOINT/);
 
 console.log("compatibility registry source contracts: pass");
