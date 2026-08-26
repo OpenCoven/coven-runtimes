@@ -46,14 +46,17 @@ bounded Cave contract you intend to ship.
 ### Historical hydration and key rotation
 
 Every publisher run starts with an empty staging tree and fetches the canonical
-HTTPS `checkpoints.json` from GitHub Pages without following a redirect. It
-validates the runtime allowlist and checkpoint fields, then fetches every
-immutable sequence from one through each checkpoint. Missing sequence files,
-redirects, network or TLS failures, malformed checkpoints, unknown runtimes,
-and non-success responses all fail closed before signing. Only an actual 404
-from the canonical `checkpoints.json` endpoint admits a first-ever deployment.
-A partial production checkpoint is valid: for example, existing OpenCode and
-Grok histories can be hydrated while OpenClaw publishes its genesis.
+HTTPS `checkpoints.json` from GitHub Pages with a fresh unguessable query value,
+`no-store` fetch semantics, and explicit no-cache request headers, without
+following a redirect. Immutable sequence URLs remain stable and cacheable. The
+hydrator validates the runtime allowlist and checkpoint fields, then fetches
+every immutable sequence from one through each checkpoint. Missing sequence
+files, redirects, network or TLS failures, malformed checkpoints, unknown
+runtimes, and non-success responses all fail closed before signing. Only an
+actual 404 from the cache-busted canonical `checkpoints.json` request admits a
+first-ever deployment. A partial production checkpoint is valid: for example,
+existing OpenCode and Grok histories can be hydrated while OpenClaw publishes
+its genesis.
 
 The builder validates every hydrated file as a signed Ed25519 bundle and binds
 each source directory to its payload runtime (`opencode`, `grok-build`, or

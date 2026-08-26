@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,13 +15,27 @@ function assertEmptyStagingDirectory(output) {
   }
 }
 
-async function fetchCanonicalBytes(fetchImpl, url, label, { allowNotFound = false } = {}) {
+async function fetchCanonicalBytes(
+  fetchImpl,
+  url,
+  label,
+  { allowNotFound = false, noCache = false } = {},
+) {
   let response;
   try {
-    response = await fetchImpl(url, {
+    const headers = { accept: "application/json" };
+    const options = {
       method: "GET",
       redirect: "manual",
-      headers: { accept: "application/json" },
+      headers,
+    };
+    if (noCache) {
+      options.cache = "no-store";
+      headers["cache-control"] = "no-cache, no-store, max-age=0";
+      headers.pragma = "no-cache";
+    }
+    response = await fetchImpl(url, {
+      ...options,
     });
   } catch (error) {
     throw new Error(`failed to fetch canonical ${label}: ${error.message}`);
@@ -66,15 +81,30 @@ function writeBytes(file, bytes) {
   writeFileSync(file, bytes);
 }
 
-export async function hydrateCompatibilityRegistrySite({ output, fetchImpl = globalThis.fetch }) {
+export async function hydrateCompatibilityRegistrySite({
+  output,
+  fetchImpl = globalThis.fetch,
+  checkpointCacheBust = randomUUID,
+}) {
   if (typeof fetchImpl !== "function") {
     throw new TypeError("compatibility registry hydration requires a fetch implementation");
   }
+  if (typeof checkpointCacheBust !== "function") {
+    throw new TypeError("compatibility registry hydration requires a checkpoint cache-bust factory");
+  }
   assertEmptyStagingDirectory(output);
 
-  const checkpointUrl = `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`;
-  const checkpointBytes = await fetchCanonicalBytes(fetchImpl, checkpointUrl, "checkpoints", {
+  const cacheBust = checkpointCacheBust();
+  if (typeof cacheBust !== "string" || cacheBust.length === 0) {
+    throw new TypeError("compatibility registry checkpoint cache bust must be a non-empty string");
+  }
+  const checkpointUrl = new URL(
+    `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+  );
+  checkpointUrl.searchParams.set("hydration", cacheBust);
+  const checkpointBytes = await fetchCanonicalBytes(fetchImpl, checkpointUrl.href, "checkpoints", {
     allowNotFound: true,
+    noCache: true,
   });
   if (checkpointBytes === null) {
     writeBytes(path.join(output, "checkpoints.json"), Buffer.from("{}\n"));

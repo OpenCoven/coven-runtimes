@@ -194,7 +194,7 @@ assert.throws(
   /source runtime mismatch.*opencode.*openclaw/i,
 );
 
-const { privateKey: oldOpenCodeKey } = generateKeyPairSync("ed25519");
+const { privateKey: oldOpenCodeKey, publicKey: oldOpenCodePublicKey } = generateKeyPairSync("ed25519");
 const { privateKey: oldGrokKey } = generateKeyPairSync("ed25519");
 const oldSignedOpenCode = signBundle(opencode, oldOpenCodeKey.export({ type: "pkcs8", format: "pem" }).toString());
 const oldSignedGrok = signBundle(grok, oldGrokKey.export({ type: "pkcs8", format: "pem" }).toString());
@@ -223,6 +223,78 @@ assert.equal(
 assert.equal(rotatedCheckpoints.opencode.payloadHash, payloadHash(oldSignedOpenCode));
 assert.equal(rotatedCheckpoints.grok.payloadHash, payloadHash(oldSignedGrok));
 assert.equal(rotatedCheckpoints.openclaw.sequence, 1);
+
+const successorOpenCode = {
+  ...opencode,
+  sequence: 2,
+  issuedAt: "2027-01-01T00:00:00.000Z",
+  expiresAt: "2028-01-01T00:00:00.000Z",
+  keyId: "opencode-rotation-test",
+};
+const successorRoot = createSourceFixture("rotation-successor-source", {
+  opencode: [opencode, successorOpenCode],
+  grok: [grok],
+  openclaw: [openclaw],
+});
+const successorOutput = path.join(scratch, "rotation-successor-site");
+stageHistory(successorOutput, {
+  opencode: [{ bundle: oldSignedOpenCode, bytes: oldOpenCodeBytes }],
+});
+const { privateKey: newOpenCodeKey, publicKey: newOpenCodePublicKey } =
+  generateKeyPairSync("ed25519");
+const newOpenCodeKeyPem = newOpenCodeKey.export({ type: "pkcs8", format: "pem" }).toString();
+const successorCheckpoints = buildCompatibilityRegistrySite({
+  root: successorRoot,
+  output: successorOutput,
+  opencodePrivateKeyPem: newOpenCodeKeyPem,
+  grokPrivateKeyPem: grokKey,
+  openclawPrivateKeyPem,
+});
+const successorSequenceOneBytes = await readFile(
+  path.join(successorOutput, "opencode/1.json"),
+  "utf8",
+);
+const successorSequenceTwoBytes = await readFile(
+  path.join(successorOutput, "opencode/2.json"),
+  "utf8",
+);
+const successorCurrentBytes = await readFile(
+  path.join(successorOutput, "opencode/current.json"),
+  "utf8",
+);
+const successorSequenceTwo = JSON.parse(successorSequenceTwoBytes);
+assert.equal(successorSequenceOneBytes, oldOpenCodeBytes);
+assert.equal(successorCurrentBytes, successorSequenceTwoBytes);
+assert.equal(successorSequenceTwo.sequence, 2);
+assert.equal(successorSequenceTwo.keyId, "opencode-rotation-test");
+assertNoPrivateKeyLeak(successorSequenceTwoBytes, newOpenCodeKeyPem);
+assert.equal(
+  verify(
+    null,
+    Buffer.from(canonicalPayload(successorSequenceTwo)),
+    newOpenCodePublicKey,
+    Buffer.from(successorSequenceTwo.signature.value, "base64"),
+  ),
+  true,
+);
+assert.equal(
+  verify(
+    null,
+    Buffer.from(canonicalPayload(successorSequenceTwo)),
+    oldOpenCodePublicKey,
+    Buffer.from(successorSequenceTwo.signature.value, "base64"),
+  ),
+  false,
+);
+assert.deepEqual(successorCheckpoints.opencode, {
+  sequence: 2,
+  payloadHash: payloadHash(successorSequenceTwo),
+});
+assert.deepEqual(
+  JSON.parse(await readFile(path.join(successorOutput, "checkpoints.json"), "utf8"))
+    .opencode,
+  successorCheckpoints.opencode,
+);
 
 for (const fixture of [
   {
@@ -360,36 +432,67 @@ function fakeRegistryFetch(routes, calls = []) {
   };
 }
 
+function checkpointRequestUrl(cacheBust) {
+  const url = new URL(`${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`);
+  url.searchParams.set("hydration", cacheBust);
+  return url.href;
+}
+
 const firstDeploymentOutput = path.join(scratch, "hydrated-first-deployment");
 const firstDeploymentCalls = [];
+const firstDeploymentCacheBust = "deterministic-first-deployment-run";
 const firstDeploymentCheckpoints = await hydrateCompatibilityRegistrySite({
   output: firstDeploymentOutput,
   fetchImpl: fakeRegistryFetch(
     new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl(firstDeploymentCacheBust),
         { status: 404, body: "not found" },
       ],
     ]),
     firstDeploymentCalls,
   ),
+  checkpointCacheBust: () => firstDeploymentCacheBust,
 });
 assert.deepEqual(firstDeploymentCheckpoints, {});
 assert.deepEqual(JSON.parse(await readFile(path.join(firstDeploymentOutput, "checkpoints.json"), "utf8")), {});
 assert.equal(firstDeploymentCalls.length, 1);
+assert.equal(firstDeploymentCalls[0].url, checkpointRequestUrl(firstDeploymentCacheBust));
 assert.equal(firstDeploymentCalls[0].options.redirect, "manual");
+assert.equal(firstDeploymentCalls[0].options.cache, "no-store");
+assert.equal(firstDeploymentCalls[0].options.headers["cache-control"], "no-cache, no-store, max-age=0");
+assert.equal(firstDeploymentCalls[0].options.headers.pragma, "no-cache");
+
+const secondHydrationCalls = [];
+const secondHydrationCacheBust = "deterministic-second-hydration-run";
+await hydrateCompatibilityRegistrySite({
+  output: path.join(scratch, "hydrated-second-run"),
+  fetchImpl: fakeRegistryFetch(
+    new Map([
+      [
+        checkpointRequestUrl(secondHydrationCacheBust),
+        { status: 404, body: "not found" },
+      ],
+    ]),
+    secondHydrationCalls,
+  ),
+  checkpointCacheBust: () => secondHydrationCacheBust,
+});
+assert.notEqual(secondHydrationCalls[0].url, firstDeploymentCalls[0].url);
 
 const productionCheckpoint = {
   opencode: { sequence: 1, payloadHash: payloadHash(oldSignedOpenCode) },
   grok: { sequence: 1, payloadHash: payloadHash(oldSignedGrok) },
 };
 const hydratedProductionOutput = path.join(scratch, "hydrated-production");
+const productionHydrationCalls = [];
+const productionCacheBust = "deterministic-production-run";
 await hydrateCompatibilityRegistrySite({
   output: hydratedProductionOutput,
   fetchImpl: fakeRegistryFetch(
     new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl(productionCacheBust),
         { status: 200, body: `${JSON.stringify(productionCheckpoint)}\n` },
       ],
       [
@@ -401,8 +504,23 @@ await hydrateCompatibilityRegistrySite({
         { status: 200, body: oldGrokBytes },
       ],
     ]),
+    productionHydrationCalls,
   ),
+  checkpointCacheBust: () => productionCacheBust,
 });
+assert.deepEqual(
+  productionHydrationCalls.map(({ url }) => url),
+  [
+    checkpointRequestUrl(productionCacheBust),
+    `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/opencode/1.json`,
+    `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/grok/1.json`,
+  ],
+);
+assert.equal(productionHydrationCalls[0].options.cache, "no-store");
+for (const { options } of productionHydrationCalls.slice(1)) {
+  assert.equal(Object.hasOwn(options, "cache"), false);
+  assert.deepEqual(options.headers, { accept: "application/json" });
+}
 assert.equal(await readFile(path.join(hydratedProductionOutput, "opencode/1.json"), "utf8"), oldOpenCodeBytes);
 assert.equal(await readFile(path.join(hydratedProductionOutput, "grok/1.json"), "utf8"), oldGrokBytes);
 buildCompatibilityRegistrySite({
@@ -422,9 +540,10 @@ assert.equal(
 for (const fixture of [
   {
     name: "checkpoint-network-error",
+    cacheBust: "checkpoint-network-error-run",
     routes: new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl("checkpoint-network-error-run"),
         new Error("simulated TLS failure"),
       ],
     ]),
@@ -432,19 +551,32 @@ for (const fixture of [
   },
   {
     name: "checkpoint-redirect",
+    cacheBust: "checkpoint-redirect-run",
     routes: new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl("checkpoint-redirect-run"),
         { status: 302, body: "", redirected: false },
       ],
     ]),
     error: /redirect|status 302/i,
   },
   {
-    name: "checkpoint-malformed-json",
+    name: "checkpoint-followed-redirect",
+    cacheBust: "checkpoint-followed-redirect-run",
     routes: new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl("checkpoint-followed-redirect-run"),
+        { status: 200, body: "{}", redirected: true },
+      ],
+    ]),
+    error: /redirect/i,
+  },
+  {
+    name: "checkpoint-malformed-json",
+    cacheBust: "checkpoint-malformed-json-run",
+    routes: new Map([
+      [
+        checkpointRequestUrl("checkpoint-malformed-json-run"),
         { status: 200, body: "not-json" },
       ],
     ]),
@@ -452,9 +584,10 @@ for (const fixture of [
   },
   {
     name: "checkpoint-empty-success",
+    cacheBust: "checkpoint-empty-success-run",
     routes: new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl("checkpoint-empty-success-run"),
         { status: 200, body: "{}" },
       ],
     ]),
@@ -462,9 +595,10 @@ for (const fixture of [
   },
   {
     name: "checkpoint-unknown-runtime",
+    cacheBust: "checkpoint-unknown-runtime-run",
     routes: new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl("checkpoint-unknown-runtime-run"),
         {
           status: 200,
           body: JSON.stringify({
@@ -477,9 +611,10 @@ for (const fixture of [
   },
   {
     name: "checkpoint-invalid-sequence",
+    cacheBust: "checkpoint-invalid-sequence-run",
     routes: new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl("checkpoint-invalid-sequence-run"),
         {
           status: 200,
           body: JSON.stringify({
@@ -492,9 +627,10 @@ for (const fixture of [
   },
   {
     name: "checkpoint-invalid-hash",
+    cacheBust: "checkpoint-invalid-hash-run",
     routes: new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl("checkpoint-invalid-hash-run"),
         {
           status: 200,
           body: JSON.stringify({
@@ -507,9 +643,10 @@ for (const fixture of [
   },
   {
     name: "missing-historical-gap",
+    cacheBust: "missing-historical-gap-run",
     routes: new Map([
       [
-        `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/checkpoints.json`,
+        checkpointRequestUrl("missing-historical-gap-run"),
         {
           status: 200,
           body: JSON.stringify({
@@ -530,6 +667,7 @@ for (const fixture of [
       hydrateCompatibilityRegistrySite({
         output: path.join(scratch, fixture.name),
         fetchImpl: fakeRegistryFetch(fixture.routes),
+        checkpointCacheBust: () => fixture.cacheBust,
       }),
     fixture.error,
   );
