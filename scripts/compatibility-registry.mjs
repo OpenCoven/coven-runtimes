@@ -66,6 +66,20 @@ function assertUnsignedBundle(bundle) {
   }
 }
 
+function assertEd25519Signature(signature) {
+  if (
+    !isRecord(signature) ||
+    Object.keys(signature).length !== 2 ||
+    signature.algorithm !== "ed25519" ||
+    typeof signature.value !== "string" ||
+    !/^[A-Za-z0-9+/]{86}==$/.test(signature.value) ||
+    Buffer.from(signature.value, "base64").length !== 64 ||
+    Buffer.from(signature.value, "base64").toString("base64") !== signature.value
+  ) {
+    throw new TypeError("compatibility registry signed bundle needs a valid Ed25519 signature object");
+  }
+}
+
 export function canonicalPayload(bundle) {
   if (!isRecord(bundle)) throw new TypeError("compatibility registry bundle must be an object");
   const { signature: _signature, ...unsigned } = bundle;
@@ -79,6 +93,15 @@ export function payloadHash(bundle) {
 export function readUnsignedBundle(file) {
   const bundle = JSON.parse(readFileSync(file, "utf8"));
   assertUnsignedBundle(bundle);
+  return bundle;
+}
+
+export function parseSignedBundle(serialized) {
+  const bundle = JSON.parse(serialized);
+  if (!isRecord(bundle)) throw new TypeError("compatibility registry signed bundle must be an object");
+  const { signature, ...unsigned } = bundle;
+  assertUnsignedBundle(unsigned);
+  assertEd25519Signature(signature);
   return bundle;
 }
 

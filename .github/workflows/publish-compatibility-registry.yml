@@ -26,6 +26,8 @@ jobs:
           node-version: 24
       - name: Verify publisher contracts
         run: node scripts/compatibility-registry.test.mjs
+      - name: Hydrate immutable registry history
+        run: node scripts/hydrate-compatibility-registry-site.mjs
       - name: Build signed public registry
         env:
           COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM: ${{ secrets.COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM }}

@@ -37,11 +37,39 @@ keys must never enter Cave, logs, issues, PR bodies, or published output.
 
 Enable GitHub Pages with the **GitHub Actions** source, then manually dispatch
 `Publish compatibility registry` only for a reviewed `main` commit. The
-workflow verifies source contracts before it signs them, uploads only `site/`,
-and deploys through the Pages environment. Before publishing an OpenClaw source
-contract, review it against Cave’s built-in OpenClaw payload so the publisher’s
-genesis or successor sequence matches the bounded Cave contract you intend to
-ship.
+workflow verifies source contracts, hydrates the published history, signs only
+new sequences, uploads only `site/`, and deploys through the Pages environment.
+Before publishing an OpenClaw source contract, review it against Cave’s built-in
+OpenClaw payload so the publisher’s genesis or successor sequence matches the
+bounded Cave contract you intend to ship.
+
+### Historical hydration and key rotation
+
+Every publisher run starts with an empty staging tree and fetches the canonical
+HTTPS `checkpoints.json` from GitHub Pages without following a redirect. It
+validates the runtime allowlist and checkpoint fields, then fetches every
+immutable sequence from one through each checkpoint. Missing sequence files,
+redirects, network or TLS failures, malformed checkpoints, unknown runtimes,
+and non-success responses all fail closed before signing. Only an actual 404
+from the canonical `checkpoints.json` endpoint admits a first-ever deployment.
+A partial production checkpoint is valid: for example, existing OpenCode and
+Grok histories can be hydrated while OpenClaw publishes its genesis.
+
+The builder validates every hydrated file as a signed Ed25519 bundle and binds
+each source directory to its payload runtime (`opencode`, `grok-build`, or
+`openclaw`). The hydrated unsigned canonical payload must match the reviewed
+source, and the latest payload hash must match its checkpoint. Existing
+sequence files are then preserved byte-for-byte; `current.json` copies the
+latest immutable file exactly, and checkpoints are regenerated from the
+preserved and newly signed bundles.
+
+This preservation rule is essential during a key rotation: replacing the
+current private key must never re-sign historical sequences or change their
+bytes. Add a higher reviewed source sequence for the new key. The publisher
+signs only that new sequence and carries all earlier signatures forward
+unchanged. Public-key verification is intentionally left to Cave and the
+release guards; publisher hydration trusts the canonical bytes only after the
+reviewed unsigned payload and checkpoint hash checks succeed.
 
 ## Cave release handoff
 
