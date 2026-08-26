@@ -114,13 +114,18 @@ reviewed unsigned payload and checkpoint hash checks succeed.
 ## Cave release handoff
 
 For each runtime, export its PEM public key and read `site/checkpoints.json`.
-Set only these public Cave repository secrets:
+Set the three public Cave repository coordinates shown for each runtime:
 
 | Runtime | Endpoint secret | Public-key secret | Checkpoint secret |
 | --- | --- | --- | --- |
 | OpenCode | `OPENCODE_SCHEMA_REGISTRY_URL` | `OPENCODE_SCHEMA_REGISTRY_PUBLIC_KEY` | `OPENCODE_SCHEMA_REGISTRY_CHECKPOINT` |
 | Grok | `GROK_SCHEMA_REGISTRY_URL` | `GROK_SCHEMA_REGISTRY_PUBLIC_KEY` | `GROK_SCHEMA_REGISTRY_CHECKPOINT` |
 | OpenClaw | `OPENCLAW_SCHEMA_REGISTRY_URL` | `OPENCLAW_SCHEMA_REGISTRY_PUBLIC_KEY` | `OPENCLAW_SCHEMA_REGISTRY_CHECKPOINT` |
+
+The public-key column names the single-key baseline. During a rotation overlap,
+the optional plural `*_SCHEMA_REGISTRY_PUBLIC_KEYS` secret is the keyring
+alternative for that runtime; it is the only additional Cave release secret
+and still contains public verification material, never a signing key.
 
 The checkpoint is exactly `{ "sequence": <number>, "payloadHash":
 "<lowercase sha256>" }`. Sequence one is the pinned Cave baseline and has no
