@@ -1,8 +1,38 @@
 import { createHash, createPrivateKey, sign } from "node:crypto";
 import { readFileSync } from "node:fs";
 
+const RUNTIME_PAYLOAD_FIELD = Object.freeze({
+  opencode: "schemas",
+  "grok-build": "schemas",
+  openclaw: "profiles",
+});
+
+const RUNTIME_RETIREMENT_FIELD = Object.freeze({
+  opencode: "retiredSchemaIds",
+  "grok-build": "retiredSchemaIds",
+  openclaw: "retiredProfileIds",
+});
+
+const COMMON_FIELDS = Object.freeze(["format", "runtime", "sequence", "issuedAt", "expiresAt", "keyId"]);
+const RUNTIME_ALLOWED_FIELDS = Object.freeze(
+  Object.fromEntries(
+    Object.keys(RUNTIME_PAYLOAD_FIELD).map((runtime) => [
+      runtime,
+      new Set([...COMMON_FIELDS, RUNTIME_RETIREMENT_FIELD[runtime], RUNTIME_PAYLOAD_FIELD[runtime]]),
+    ]),
+  ),
+);
+
 function isRecord(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function runtimeContract(runtime) {
+  if (typeof runtime !== "string" || !Object.hasOwn(RUNTIME_PAYLOAD_FIELD, runtime)) return null;
+  return {
+    payloadField: RUNTIME_PAYLOAD_FIELD[runtime],
+    allowedFields: RUNTIME_ALLOWED_FIELDS[runtime],
+  };
 }
 
 function canonicalize(value) {
@@ -14,17 +44,21 @@ function canonicalize(value) {
 }
 
 function assertUnsignedBundle(bundle) {
-  if (!isRecord(bundle) || bundle.format !== 1 || !["opencode", "grok-build"].includes(bundle.runtime)) {
-    throw new TypeError("compatibility registry source must be a format-1 OpenCode or Grok bundle");
-  }
-  if (!Object.keys(bundle).every((key) => ["format", "runtime", "sequence", "issuedAt", "expiresAt", "keyId", "retiredSchemaIds", "schemas"].includes(key))) {
+  const contract = isRecord(bundle) && bundle.format === 1 ? runtimeContract(bundle.runtime) : null;
+  if (!contract) throw new TypeError("compatibility registry source must be a format-1 OpenCode, Grok, or OpenClaw bundle");
+  if (!Object.keys(bundle).every((key) => contract.allowedFields.has(key))) {
     throw new TypeError("compatibility registry source contains an unsupported field");
   }
   for (const [key, value] of Object.entries(bundle)) {
     if (value === undefined) throw new TypeError(`compatibility registry source field ${key} must not be undefined`);
   }
-  if (!Number.isSafeInteger(bundle.sequence) || bundle.sequence < 1 || !Array.isArray(bundle.schemas) || bundle.schemas.length === 0) {
-    throw new TypeError("compatibility registry source needs a positive sequence and non-empty schemas");
+  if (
+    !Number.isSafeInteger(bundle.sequence) ||
+    bundle.sequence < 1 ||
+    !Array.isArray(bundle[contract.payloadField]) ||
+    bundle[contract.payloadField].length === 0
+  ) {
+    throw new TypeError(`compatibility registry source needs a positive sequence and non-empty ${contract.payloadField}`);
   }
   if (Object.hasOwn(bundle, "signature")) throw new TypeError("compatibility registry source must not contain a signature");
   if (bundle.keyId !== undefined && !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(bundle.keyId)) {

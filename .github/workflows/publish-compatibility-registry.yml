@@ -30,6 +30,7 @@ jobs:
         env:
           COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM: ${{ secrets.COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM }}
           COMPATIBILITY_GROK_PRIVATE_KEY_PEM: ${{ secrets.COMPATIBILITY_GROK_PRIVATE_KEY_PEM }}
+          COMPATIBILITY_OPENCLAW_PRIVATE_KEY_PEM: ${{ secrets.COMPATIBILITY_OPENCLAW_PRIVATE_KEY_PEM }}
         run: node scripts/build-compatibility-registry-site.mjs
       - name: Upload public Pages artifact
         uses: actions/upload-pages-artifact@v3

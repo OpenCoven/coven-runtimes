@@ -6,6 +6,7 @@ import { payloadHash, readUnsignedBundle, signBundle } from "./compatibility-reg
 const RUNTIMES = [
   { name: "opencode", source: "opencode", key: "opencodePrivateKeyPem" },
   { name: "grok", source: "grok", key: "grokPrivateKeyPem" },
+  { name: "openclaw", source: "openclaw", key: "openclawPrivateKeyPem" },
 ];
 
 function sourceFiles(root, source) {
@@ -60,5 +61,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     output: path.join(root, "site"),
     opencodePrivateKeyPem: process.env.COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM,
     grokPrivateKeyPem: process.env.COMPATIBILITY_GROK_PRIVATE_KEY_PEM,
+    openclawPrivateKeyPem: process.env.COMPATIBILITY_OPENCLAW_PRIVATE_KEY_PEM,
   });
 }
