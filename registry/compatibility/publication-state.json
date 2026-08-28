@@ -3,6 +3,24 @@
     "opencode": 1,
     "grok": 1
   },
+  "publishedCheckpoints": {
+    "opencode": {
+      "sequence": 1,
+      "payloadHash": "8e377ed4a898aa734f22a23997b9ddca2d5814618e55e654498dc7cadbbba215"
+    },
+    "grok": {
+      "sequence": 1,
+      "payloadHash": "65f094c3f43b15819b761a61507204ffc3d600e6a5ea709fa0232056ec27c267"
+    }
+  },
+  "publishedArtifactHashes": {
+    "opencode": {
+      "1": "871c8e1e41e76663ed02539d9752fe7e3f9fd2e8faa479bc98666676dfc30448"
+    },
+    "grok": {
+      "1": "9fd30e430ed560c18e2a3cdfe11009afa8c81c059fbde40ac842a3b39a4003fa"
+    }
+  },
   "authorizedGenesisRuntimes": [
     "openclaw"
   ]

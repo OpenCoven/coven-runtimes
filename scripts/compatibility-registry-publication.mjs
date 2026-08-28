@@ -43,6 +43,8 @@ export function validateCompatibilityRegistryPublicationState(value) {
   const keys = Object.keys(value).sort();
   const expectedKeys = [
     "authorizedGenesisRuntimes",
+    "publishedArtifactHashes",
+    "publishedCheckpoints",
     "publishedSequenceFloors",
   ];
   if (
@@ -50,14 +52,29 @@ export function validateCompatibilityRegistryPublicationState(value) {
     keys.some((key, index) => key !== expectedKeys[index])
   ) {
     throw new TypeError(
-      "compatibility registry publication state must contain exactly publishedSequenceFloors and authorizedGenesisRuntimes",
+      "compatibility registry publication state must contain exactly publishedSequenceFloors, publishedCheckpoints, publishedArtifactHashes, and authorizedGenesisRuntimes",
     );
   }
 
-  const { publishedSequenceFloors, authorizedGenesisRuntimes } = value;
+  const {
+    publishedSequenceFloors,
+    publishedCheckpoints,
+    publishedArtifactHashes,
+    authorizedGenesisRuntimes,
+  } = value;
   if (!isRecord(publishedSequenceFloors)) {
     throw new TypeError(
       "compatibility registry published sequence floors must be an object",
+    );
+  }
+  if (!isRecord(publishedCheckpoints)) {
+    throw new TypeError(
+      "compatibility registry published checkpoints must be an object",
+    );
+  }
+  if (!isRecord(publishedArtifactHashes)) {
+    throw new TypeError(
+      "compatibility registry published artifact hashes must be an object",
     );
   }
   if (!Array.isArray(authorizedGenesisRuntimes)) {
@@ -78,7 +95,49 @@ export function validateCompatibilityRegistryPublicationState(value) {
         `compatibility registry publication floor for ${runtime} must be a positive safe integer`,
       );
     }
+    const checkpoint = publishedCheckpoints[runtime];
+    if (
+      !isRecord(checkpoint) ||
+      Object.keys(checkpoint).length !== 2 ||
+      checkpoint.sequence !== floor ||
+      typeof checkpoint.payloadHash !== "string" ||
+      !/^[a-f0-9]{64}$/.test(checkpoint.payloadHash)
+    ) {
+      throw new TypeError(
+        `compatibility registry published checkpoint for ${runtime} must match floor ${floor}`,
+      );
+    }
+    const hashes = publishedArtifactHashes[runtime];
+    if (!isRecord(hashes)) {
+      throw new TypeError(
+        `compatibility registry published artifact hashes for ${runtime} must be an object`,
+      );
+    }
+    const actualSequences = Object.keys(hashes).sort((left, right) => Number(left) - Number(right));
+    if (
+      actualSequences.length !== floor ||
+      actualSequences.some((sequence, index) => sequence !== String(index + 1)) ||
+      actualSequences.some((sequence) => !/^[a-f0-9]{64}$/.test(hashes[sequence]))
+    ) {
+      throw new TypeError(
+        `compatibility registry published artifact hashes for ${runtime} must cover every sequence through ${floor}`,
+      );
+    }
     classifiedRuntimes.add(runtime);
+  }
+  for (const runtime of Object.keys(publishedCheckpoints)) {
+    if (!Object.hasOwn(publishedSequenceFloors, runtime)) {
+      throw new TypeError(
+        `compatibility registry published checkpoints contain unclassified runtime ${runtime}`,
+      );
+    }
+  }
+  for (const runtime of Object.keys(publishedArtifactHashes)) {
+    if (!Object.hasOwn(publishedSequenceFloors, runtime)) {
+      throw new TypeError(
+        `compatibility registry published artifact hashes contain unclassified runtime ${runtime}`,
+      );
+    }
   }
 
   const genesisRuntimes = new Set();
@@ -165,9 +224,14 @@ export function validateCompatibilityRegistryCheckpoints(
     state.publishedSequenceFloors,
   )) {
     const checkpoint = value[runtime];
-    if (!checkpoint || checkpoint.sequence < floor) {
+    const expected = state.publishedCheckpoints[runtime];
+    if (
+      !checkpoint ||
+      checkpoint.sequence !== floor ||
+      checkpoint.payloadHash !== expected.payloadHash
+    ) {
       throw new TypeError(
-        `compatibility registry checkpoint for ${runtime} does not satisfy published floor ${floor}`,
+        `compatibility registry checkpoint for ${runtime} does not match tracked published sequence ${floor} and payload hash`,
       );
     }
   }

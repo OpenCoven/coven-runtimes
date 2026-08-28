@@ -1,4 +1,4 @@
-import { createHash, createPrivateKey, sign } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const RUNTIME_PAYLOAD_FIELD = Object.freeze({
@@ -90,6 +90,10 @@ export function payloadHash(bundle) {
   return createHash("sha256").update(canonicalPayload(bundle)).digest("hex");
 }
 
+export function artifactHash(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
 export function readUnsignedBundle(file) {
   const bundle = JSON.parse(readFileSync(file, "utf8"));
   assertUnsignedBundle(bundle);
@@ -110,8 +114,19 @@ export function signBundle(bundle, privateKeyPem) {
   const key = createPrivateKey(privateKeyPem);
   if (key.asymmetricKeyType !== "ed25519") throw new TypeError("compatibility registry signing key must be Ed25519");
   const signed = { ...bundle };
-  return {
+  const result = {
     ...signed,
     signature: { algorithm: "ed25519", value: sign(null, Buffer.from(canonicalPayload(signed)), key).toString("base64") },
   };
+  if (
+    !verify(
+      null,
+      Buffer.from(canonicalPayload(result)),
+      createPublicKey(key),
+      Buffer.from(result.signature.value, "base64"),
+    )
+  ) {
+    throw new Error("compatibility registry generated signature failed verification");
+  }
+  return result;
 }

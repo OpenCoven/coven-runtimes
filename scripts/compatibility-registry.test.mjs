@@ -4,7 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { canonicalPayload, payloadHash, readUnsignedBundle, signBundle } from "./compatibility-registry.mjs";
+import { artifactHash, canonicalPayload, payloadHash, readUnsignedBundle, signBundle } from "./compatibility-registry.mjs";
 import { buildCompatibilityRegistrySite } from "./build-compatibility-registry-site.mjs";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
@@ -27,10 +27,30 @@ const expectedPublicationState = {
     opencode: 1,
     grok: 1,
   },
+  publishedCheckpoints: {
+    opencode: {
+      sequence: 1,
+      payloadHash: "8e377ed4a898aa734f22a23997b9ddca2d5814618e55e654498dc7cadbbba215",
+    },
+    grok: {
+      sequence: 1,
+      payloadHash: "65f094c3f43b15819b761a61507204ffc3d600e6a5ea709fa0232056ec27c267",
+    },
+  },
+  publishedArtifactHashes: {
+    opencode: {
+      1: "871c8e1e41e76663ed02539d9752fe7e3f9fd2e8faa479bc98666676dfc30448",
+    },
+    grok: {
+      1: "9fd30e430ed560c18e2a3cdfe11009afa8c81c059fbde40ac842a3b39a4003fa",
+    },
+  },
   authorizedGenesisRuntimes: ["openclaw"],
 };
 const allGenesisPublicationState = {
   publishedSequenceFloors: {},
+  publishedCheckpoints: {},
+  publishedArtifactHashes: {},
   authorizedGenesisRuntimes: ["opencode", "grok", "openclaw"],
 };
 assert.deepEqual(readCompatibilityRegistryPublicationState(root), expectedPublicationState);
@@ -101,6 +121,7 @@ function stageHistory(output, histories) {
       mkdirSync(path.join(output, runtime), { recursive: true });
       writeFileSync(path.join(output, runtime, `${entry.bundle.sequence}.json`), entry.bytes);
     }
+
     const latest = entries.at(-1);
     checkpoints[runtime] = {
       sequence: latest.bundle.sequence,
@@ -111,13 +132,39 @@ function stageHistory(output, histories) {
   return checkpoints;
 }
 
+function publicationStateFor(histories, authorizedGenesisRuntimes) {
+  const publishedSequenceFloors = {};
+  const publishedCheckpoints = {};
+  const publishedArtifactHashes = {};
+  for (const [runtime, entries] of Object.entries(histories)) {
+    const latest = entries.at(-1);
+    publishedSequenceFloors[runtime] = latest.bundle.sequence;
+    publishedCheckpoints[runtime] = {
+      sequence: latest.bundle.sequence,
+      payloadHash: latest.checkpointHash ?? payloadHash(latest.bundle),
+    };
+    publishedArtifactHashes[runtime] = Object.fromEntries(
+      entries.map((entry) => [
+        String(entry.bundle.sequence),
+        artifactHash(entry.bytes),
+      ]),
+    );
+  }
+  return {
+    publishedSequenceFloors,
+    publishedCheckpoints,
+    publishedArtifactHashes,
+    authorizedGenesisRuntimes,
+  };
+}
+
 assert.deepEqual(
   validateCompatibilityRegistryPublicationState(structuredClone(expectedPublicationState)),
   expectedPublicationState,
 );
 for (const [state, error] of [
   [null, /publication state must be an object/i],
-  [{}, /exactly.*publishedSequenceFloors.*authorizedGenesisRuntimes/i],
+  [{}, /exactly.*publishedSequenceFloors.*publishedCheckpoints.*publishedArtifactHashes.*authorizedGenesisRuntimes/i],
   [
     {
       ...expectedPublicationState,
@@ -166,6 +213,14 @@ for (const [state, error] of [
   [
     {
       publishedSequenceFloors: { opencode: 1, grok: 1, openclaw: 1 },
+      publishedCheckpoints: {
+        ...expectedPublicationState.publishedCheckpoints,
+        openclaw: { sequence: 1, payloadHash: "a".repeat(64) },
+      },
+      publishedArtifactHashes: {
+        ...expectedPublicationState.publishedArtifactHashes,
+        openclaw: { 1: "b".repeat(64) },
+      },
       authorizedGenesisRuntimes: ["openclaw"],
     },
     /overlap.*openclaw/i,
@@ -173,6 +228,8 @@ for (const [state, error] of [
   [
     {
       publishedSequenceFloors: { opencode: 1, grok: 1 },
+      publishedCheckpoints: expectedPublicationState.publishedCheckpoints,
+      publishedArtifactHashes: expectedPublicationState.publishedArtifactHashes,
       authorizedGenesisRuntimes: [],
     },
     /does not classify runtime openclaw/i,
@@ -364,10 +421,9 @@ const successorRoot = createSourceFixture("rotation-successor-source", {
   opencode: [opencode, successorOpenCode],
   grok: [grok],
   openclaw: [openclaw],
-}, {
-  publishedSequenceFloors: { opencode: 1 },
-  authorizedGenesisRuntimes: ["grok", "openclaw"],
-});
+}, publicationStateFor({
+  opencode: [{ bundle: oldSignedOpenCode, bytes: oldOpenCodeBytes }],
+}, ["grok", "openclaw"]));
 const successorOutput = path.join(scratch, "rotation-successor-site");
 stageHistory(successorOutput, {
   opencode: [{ bundle: oldSignedOpenCode, bytes: oldOpenCodeBytes }],
@@ -470,10 +526,18 @@ stageHistory(sourceDriftOutput, {
   opencode: [{ bundle: driftedOpenCode, bytes: `${JSON.stringify(driftedOpenCode)}\n` }],
   grok: [{ bundle: oldSignedGrok, bytes: oldGrokBytes }],
 });
+const sourceDriftRoot = createSourceFixture("source-drift-root", {
+  opencode: [opencode],
+  grok: [grok],
+  openclaw: [openclaw],
+}, publicationStateFor({
+  opencode: [{ bundle: driftedOpenCode, bytes: `${JSON.stringify(driftedOpenCode)}\n` }],
+  grok: [{ bundle: oldSignedGrok, bytes: oldGrokBytes }],
+}, ["openclaw"]));
 assert.throws(
   () =>
     buildCompatibilityRegistrySite({
-      root,
+      root: sourceDriftRoot,
       output: sourceDriftOutput,
       opencodePrivateKeyPem: privateKeyPem,
       grokPrivateKeyPem: grokKey,
@@ -667,7 +731,7 @@ assert.throws(
       { grok: productionCheckpoint.grok },
       expectedPublicationState,
     ),
-  /opencode.*published floor.*1/i,
+  /opencode.*tracked published sequence 1/i,
 );
 assert.throws(
   () =>
@@ -675,23 +739,40 @@ assert.throws(
       { opencode: productionCheckpoint.opencode },
       expectedPublicationState,
     ),
-  /grok.*published floor.*1/i,
+  /grok.*tracked published sequence 1/i,
 );
 assert.throws(
   () =>
     validateCompatibilityRegistryCheckpoints(productionCheckpoint, {
-        publishedSequenceFloors: { opencode: 2, grok: 1 },
-        authorizedGenesisRuntimes: ["openclaw"],
-      }),
-    /opencode.*published floor.*2/i,
+      publishedSequenceFloors: { opencode: 2, grok: 1 },
+      publishedCheckpoints: {
+        opencode: { sequence: 2, payloadHash: "a".repeat(64) },
+        grok: productionCheckpoint.grok,
+      },
+      publishedArtifactHashes: {
+        opencode: { 1: "b".repeat(64), 2: "c".repeat(64) },
+        grok: { 1: "d".repeat(64) },
+      },
+      authorizedGenesisRuntimes: ["openclaw"],
+    }),
+    /opencode.*tracked published sequence 2/i,
 );
 assert.throws(
     () =>
       validateCompatibilityRegistryCheckpoints(productionCheckpoint, {
       publishedSequenceFloors: { opencode: 1, grok: 1, openclaw: 1 },
+      publishedCheckpoints: {
+        ...productionCheckpoint,
+        openclaw: { sequence: 1, payloadHash: "a".repeat(64) },
+      },
+      publishedArtifactHashes: {
+        opencode: { 1: "b".repeat(64) },
+        grok: { 1: "c".repeat(64) },
+        openclaw: { 1: "d".repeat(64) },
+      },
       authorizedGenesisRuntimes: [],
     }),
-  /openclaw.*published floor.*1/i,
+  /openclaw.*tracked published sequence 1/i,
   "removing OpenClaw genesis authorization requires its published checkpoint",
 );
 assert.throws(
@@ -706,10 +787,19 @@ assert.throws(
   /openclaw.*authorized genesis.*already published/i,
 );
 const hydratedProductionOutput = path.join(scratch, "hydrated-production");
+const productionHydrationRoot = createSourceFixture("production-hydration-root", {
+  opencode: [opencode],
+  grok: [grok],
+  openclaw: [openclaw],
+}, publicationStateFor({
+  opencode: [{ bundle: oldSignedOpenCode, bytes: oldOpenCodeBytes }],
+  grok: [{ bundle: oldSignedGrok, bytes: oldGrokBytes }],
+}, ["openclaw"]));
 const productionHydrationCalls = [];
 const productionCacheBust = "deterministic-production-run";
 await hydrateCompatibilityRegistrySite({
   output: hydratedProductionOutput,
+  root: productionHydrationRoot,
   fetchImpl: fakeRegistryFetch(
     new Map([
       [
@@ -744,6 +834,35 @@ for (const { options } of productionHydrationCalls.slice(1)) {
 }
 assert.equal(await readFile(path.join(hydratedProductionOutput, "opencode/1.json"), "utf8"), oldOpenCodeBytes);
 assert.equal(await readFile(path.join(hydratedProductionOutput, "grok/1.json"), "utf8"), oldGrokBytes);
+const tamperedSignedOpenCode = {
+  ...oldSignedOpenCode,
+  signature: {
+    algorithm: "ed25519",
+    value: Buffer.alloc(64).toString("base64"),
+  },
+};
+const tamperedHistoryCacheBust = "tampered-signed-history-run";
+await assert.rejects(
+  () =>
+    hydrateCompatibilityRegistrySite({
+      output: path.join(scratch, "tampered-signed-history"),
+      root: productionHydrationRoot,
+      fetchImpl: fakeRegistryFetch(
+        new Map([
+          [
+            checkpointRequestUrl(tamperedHistoryCacheBust),
+            { status: 200, body: `${JSON.stringify(productionCheckpoint)}\n` },
+          ],
+          [
+            `${CANONICAL_COMPATIBILITY_REGISTRY_BASE_URL}/opencode/1.json`,
+            { status: 200, body: `${JSON.stringify(tamperedSignedOpenCode)}\n` },
+          ],
+        ]),
+      ),
+      checkpointCacheBust: () => tamperedHistoryCacheBust,
+    }),
+  /opencode.*signed artifact hash/i,
+);
 buildCompatibilityRegistrySite({
   root,
   output: hydratedProductionOutput,
@@ -777,7 +896,7 @@ for (const [runtime, checkpoint] of [
         ),
         checkpointCacheBust: () => cacheBust,
       }),
-    new RegExp(`${runtime}.*published floor.*1`, "i"),
+    new RegExp(`${runtime}.*tracked published sequence 1`, "i"),
   );
 }
 
@@ -886,7 +1005,7 @@ for (const fixture of [
     error: /checkpoint.*malformed/i,
   },
   {
-    name: "missing-historical-gap",
+    name: "unfinalized-future-checkpoint",
     cacheBust: "missing-historical-gap-run",
     routes: new Map([
       [
@@ -904,7 +1023,7 @@ for (const fixture of [
         { status: 200, body: oldOpenCodeBytes },
       ],
     ]),
-    error: /missing historical.*opencode.*2|status 404/i,
+    error: /opencode.*tracked published sequence 1/i,
   },
 ]) {
   await assert.rejects(
@@ -946,7 +1065,9 @@ const workflow = readFileSync(new URL("../.github/workflows/publish-compatibilit
 assert.match(workflow, /workflow_dispatch/);
 assert.doesNotMatch(workflow, /inputs:/, "publisher never checks out caller-selected workflow code with signing keys");
 assert.match(workflow, /compatibility-registry-publisher/);
-assert.match(workflow, /ref: main/);
+assert.match(workflow, /if: github\.ref == 'refs\/heads\/main'/);
+assert.match(workflow, /ref: \$\{\{ github\.sha \}\}/);
+assert.doesNotMatch(workflow, /ref: main/);
 assert.match(workflow, /COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM/);
 assert.match(workflow, /COMPATIBILITY_GROK_PRIVATE_KEY_PEM/);
 assert.match(workflow, /COMPATIBILITY_OPENCLAW_PRIVATE_KEY_PEM/);
@@ -1004,6 +1125,8 @@ assert.match(runbook, /never.*recovery/i);
 assert.match(runbook, /redirect/i);
 assert.match(runbook, /fail closed/i);
 assert.match(runbook, /publication-state\.json/);
+assert.match(runbook, /signed artifact hash/i);
+assert.match(runbook, /best-effort only/i);
 assert.match(runbook, /authorizes OpenClaw genesis once/i);
 assert.match(runbook, /immediately after successful Pages deployment/i);
 assert.match(runbook, /openclaw.*1/i);

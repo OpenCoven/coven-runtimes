@@ -15,12 +15,13 @@ concurrency:
 jobs:
   build:
     name: Sign and build Pages site
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: compatibility-registry-publisher
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: main
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24

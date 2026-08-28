@@ -3,6 +3,9 @@ import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  artifactHash,
+} from "./compatibility-registry.mjs";
+import {
   readCompatibilityRegistryPublicationState,
   validateCompatibilityRegistryCheckpoints,
 } from "./compatibility-registry-publication.mjs";
@@ -103,6 +106,7 @@ export function parseHydrationCliArgs(args) {
 
 export async function hydrateCompatibilityRegistrySite({
   output,
+  root = fileURLToPath(new URL("..", import.meta.url)),
   fetchImpl = globalThis.fetch,
   checkpointCacheBust = randomUUID,
   allowBootstrap404 = false,
@@ -116,7 +120,6 @@ export async function hydrateCompatibilityRegistrySite({
   if (typeof allowBootstrap404 !== "boolean") {
     throw new TypeError("compatibility registry bootstrap authorization must be a boolean");
   }
-  const root = fileURLToPath(new URL("..", import.meta.url));
   const publicationState = readCompatibilityRegistryPublicationState(root);
   assertEmptyStagingDirectory(output);
 
@@ -147,6 +150,13 @@ export async function hydrateCompatibilityRegistrySite({
         url,
         `${runtime} historical sequence ${sequence}`,
       );
+      const expectedArtifactHash =
+        publicationState.publishedArtifactHashes[runtime]?.[String(sequence)];
+      if (!expectedArtifactHash || artifactHash(bytes) !== expectedArtifactHash) {
+        throw new Error(
+          `canonical ${runtime} historical sequence ${sequence} does not match the tracked signed artifact hash`,
+        );
+      }
       historicalFiles.push({ runtime, sequence, bytes });
     }
   }

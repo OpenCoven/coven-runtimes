@@ -48,36 +48,39 @@ bounded Cave contract you intend to ship.
 Every publisher run starts with an empty staging tree and fetches the canonical
 HTTPS `checkpoints.json` from GitHub Pages with a fresh unguessable query value,
 `no-store` fetch semantics, and explicit no-cache request headers, without
-following a redirect. Immutable sequence URLs remain stable and cacheable. The
-hydrator validates the runtime allowlist and checkpoint fields, then fetches
-every immutable sequence from one through each checkpoint. Missing sequence
-files, redirects, network or TLS failures, malformed checkpoints, unknown
-runtimes, and non-success responses all fail closed before signing. A 404 from
-the cache-busted canonical `checkpoints.json` request also fails closed by
-default.
+following a redirect. Those cache directives are best-effort only: the trust
+boundary is the protected publication-state ledger, not CDN freshness.
+Immutable sequence URLs remain stable and cacheable. The hydrator requires the
+checkpoint to match the exact tracked sequence and payload hash, then verifies
+the SHA-256 of every complete signed historical file before staging it. Missing
+or changed sequence files, stale or future checkpoints, redirects, network or
+TLS failures, malformed checkpoints, unknown runtimes, and non-success
+responses all fail closed before signing. A 404 from the cache-busted canonical
+`checkpoints.json` request also fails closed by default.
 
 This repository already has published OpenCode and Grok history, so the normal
 publisher workflow must never authorize bootstrap. A partial production
 checkpoint is valid only when it matches the tracked
-`registry/compatibility/publication-state.json` contract. That file records
-minimum published sequence floors and a disjoint, closed allowlist of runtimes
-authorized for one genesis publication. The publisher loads it automatically;
-there are no workflow or caller inputs that can weaken it. Every floor runtime
-must appear in a successful canonical checkpoint response at or above its
-floor. An absent runtime is accepted only when the file explicitly authorizes
-its genesis, and a genesis-authorized runtime must not already appear in the
-canonical checkpoints.
+`registry/compatibility/publication-state.json` contract. That file records the
+exact published checkpoint plus the SHA-256 of every immutable signed sequence,
+alongside a disjoint, closed allowlist of runtimes authorized for one genesis
+publication. The publisher loads it automatically; there are no workflow or
+caller inputs that can weaken it. Every published runtime must match the tracked
+sequence, payload hash, and signed artifact bytes exactly. An absent runtime is
+accepted only when the file explicitly authorizes its genesis, and a
+genesis-authorized runtime must not already appear in the canonical checkpoints.
 
-This feature PR authorizes OpenClaw genesis once. OpenCode and Grok each have a
-published floor of sequence 1, while OpenClaw is the sole authorized genesis
-runtime. Therefore a successful checkpoint response that omits OpenCode or Grok
-fails before any history is signed, while the current omission of OpenClaw is
-accepted.
+This feature PR authorizes OpenClaw genesis once. OpenCode and Grok each have an
+exact sequence-one checkpoint and signed artifact hash, while OpenClaw is the
+sole authorized genesis runtime. Therefore a successful checkpoint response
+that omits, advances, or rolls back OpenCode or Grok fails before any history is
+signed, while the current omission of OpenClaw is accepted.
 
 Immediately after successful Pages deployment of OpenClaw sequence 1, open a
-follow-up state-finalization PR. In that PR, add `"openclaw": 1` to
-`publishedSequenceFloors` and remove OpenClaw from genesis authorization. Merge
-it before dispatching the publisher again.
+follow-up state-finalization PR. In that PR, add OpenClaw sequence 1 to
+`publishedSequenceFloors`, `publishedCheckpoints`, and
+`publishedArtifactHashes`, then remove OpenClaw from genesis authorization.
+Merge it before dispatching the publisher again.
 Never leave a deployed runtime genesis-authorized.
 
 Never use bootstrap authorization for recovery from an outage, Pages
@@ -95,21 +98,23 @@ request. Redirects, network failures, malformed responses, and every other
 status remain fatal. Remove the flag immediately after the first publication;
 all later runs must use the normal bootstrap-disabled command.
 
-The builder validates every hydrated file as a signed Ed25519 bundle and binds
-each source directory to its payload runtime (`opencode`, `grok-build`, or
+The hydrator verifies every historical file against its protected signed-file
+hash. The builder also validates its Ed25519 signature structure and binds each
+source directory to its payload runtime (`opencode`, `grok-build`, or
 `openclaw`). The hydrated unsigned canonical payload must match the reviewed
 source, and the latest payload hash must match its checkpoint. Existing
 sequence files are then preserved byte-for-byte; `current.json` copies the
 latest immutable file exactly, and checkpoints are regenerated from the
-preserved and newly signed bundles.
+preserved and newly signed bundles. Newly generated signatures are verified
+against the public key derived from the active private key before publication.
 
 This preservation rule is essential during a key rotation: replacing the
 current private key must never re-sign historical sequences or change their
 bytes. Add a higher reviewed source sequence for the new key. The publisher
 signs only that new sequence and carries all earlier signatures forward
-unchanged. Public-key verification is intentionally left to Cave and the
-release guards; publisher hydration trusts the canonical bytes only after the
-reviewed unsigned payload and checkpoint hash checks succeed.
+unchanged. Cave and the release guards still verify signatures with the packaged
+public keyrings; publisher hydration independently refuses any historical bytes
+that differ from the protected publication-state ledger.
 
 ## Cave release handoff
 
