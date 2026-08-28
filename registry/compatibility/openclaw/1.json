@@ -1,0 +1,42 @@
+{
+  "format": 1,
+  "runtime": "openclaw",
+  "sequence": 1,
+  "issuedAt": "2026-07-31T00:00:00.000Z",
+  "expiresAt": "2030-01-01T00:00:00.000Z",
+  "profiles": [
+    {
+      "id": "openclaw-agent-tool-v1",
+      "priority": 100,
+      "requires": {
+        "serverVersions": ["2026.7.2-beta.5"],
+        "protocol": 4,
+        "agentEventSchemaHash": "ed68832d5ecbc52de7ad5394933cb2a0df7b0f0b6f7a880127f688becbd76bd2",
+        "methods": ["chat.send", "chat.abort", "sessions.messages.subscribe"],
+        "events": ["chat", "agent", "session.tool"],
+        "serverCapabilities": ["chat-send-routing-contract"],
+        "clientCapabilities": ["tool-events"]
+      },
+      "eventNames": ["agent", "session.tool"],
+      "streams": ["tool"],
+      "phases": { "start": ["start"], "update": ["update"], "result": ["result"] },
+      "aliases": {
+        "phase": ["phase"],
+        "toolCallId": ["toolCallId"],
+        "name": ["name"],
+        "args": ["args"],
+        "partialResult": ["partialResult"],
+        "result": ["result"],
+        "isError": ["isError"],
+        "status": ["status"],
+        "exitCode": ["exitCode"]
+      },
+      "errorStates": ["error", "failed", "failure"],
+      "source": {
+        "repo": "openclaw/openclaw",
+        "package": "@openclaw/gateway-protocol@2026.7.2-beta.5",
+        "blobSha": "d66b514a7e7565d89c87ab6f1a509623128093f0"
+      }
+    }
+  ]
+}

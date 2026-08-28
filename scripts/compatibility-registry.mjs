@@ -1,8 +1,38 @@
-import { createHash, createPrivateKey, sign } from "node:crypto";
+import { createHash, createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 import { readFileSync } from "node:fs";
+
+const RUNTIME_PAYLOAD_FIELD = Object.freeze({
+  opencode: "schemas",
+  "grok-build": "schemas",
+  openclaw: "profiles",
+});
+
+const RUNTIME_RETIREMENT_FIELD = Object.freeze({
+  opencode: "retiredSchemaIds",
+  "grok-build": "retiredSchemaIds",
+  openclaw: "retiredProfileIds",
+});
+
+const COMMON_FIELDS = Object.freeze(["format", "runtime", "sequence", "issuedAt", "expiresAt", "keyId"]);
+const RUNTIME_ALLOWED_FIELDS = Object.freeze(
+  Object.fromEntries(
+    Object.keys(RUNTIME_PAYLOAD_FIELD).map((runtime) => [
+      runtime,
+      new Set([...COMMON_FIELDS, RUNTIME_RETIREMENT_FIELD[runtime], RUNTIME_PAYLOAD_FIELD[runtime]]),
+    ]),
+  ),
+);
 
 function isRecord(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function runtimeContract(runtime) {
+  if (typeof runtime !== "string" || !Object.hasOwn(RUNTIME_PAYLOAD_FIELD, runtime)) return null;
+  return {
+    payloadField: RUNTIME_PAYLOAD_FIELD[runtime],
+    allowedFields: RUNTIME_ALLOWED_FIELDS[runtime],
+  };
 }
 
 function canonicalize(value) {
@@ -14,21 +44,39 @@ function canonicalize(value) {
 }
 
 function assertUnsignedBundle(bundle) {
-  if (!isRecord(bundle) || bundle.format !== 1 || !["opencode", "grok-build"].includes(bundle.runtime)) {
-    throw new TypeError("compatibility registry source must be a format-1 OpenCode or Grok bundle");
-  }
-  if (!Object.keys(bundle).every((key) => ["format", "runtime", "sequence", "issuedAt", "expiresAt", "keyId", "retiredSchemaIds", "schemas"].includes(key))) {
+  const contract = isRecord(bundle) && bundle.format === 1 ? runtimeContract(bundle.runtime) : null;
+  if (!contract) throw new TypeError("compatibility registry source must be a format-1 OpenCode, Grok, or OpenClaw bundle");
+  if (!Object.keys(bundle).every((key) => contract.allowedFields.has(key))) {
     throw new TypeError("compatibility registry source contains an unsupported field");
   }
   for (const [key, value] of Object.entries(bundle)) {
     if (value === undefined) throw new TypeError(`compatibility registry source field ${key} must not be undefined`);
   }
-  if (!Number.isSafeInteger(bundle.sequence) || bundle.sequence < 1 || !Array.isArray(bundle.schemas) || bundle.schemas.length === 0) {
-    throw new TypeError("compatibility registry source needs a positive sequence and non-empty schemas");
+  if (
+    !Number.isSafeInteger(bundle.sequence) ||
+    bundle.sequence < 1 ||
+    !Array.isArray(bundle[contract.payloadField]) ||
+    bundle[contract.payloadField].length === 0
+  ) {
+    throw new TypeError(`compatibility registry source needs a positive sequence and non-empty ${contract.payloadField}`);
   }
   if (Object.hasOwn(bundle, "signature")) throw new TypeError("compatibility registry source must not contain a signature");
   if (bundle.keyId !== undefined && !/^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(bundle.keyId)) {
     throw new TypeError("compatibility registry source key id is invalid");
+  }
+}
+
+function assertEd25519Signature(signature) {
+  if (
+    !isRecord(signature) ||
+    Object.keys(signature).length !== 2 ||
+    signature.algorithm !== "ed25519" ||
+    typeof signature.value !== "string" ||
+    !/^[A-Za-z0-9+/]{86}==$/.test(signature.value) ||
+    Buffer.from(signature.value, "base64").length !== 64 ||
+    Buffer.from(signature.value, "base64").toString("base64") !== signature.value
+  ) {
+    throw new TypeError("compatibility registry signed bundle needs a valid Ed25519 signature object");
   }
 }
 
@@ -42,9 +90,22 @@ export function payloadHash(bundle) {
   return createHash("sha256").update(canonicalPayload(bundle)).digest("hex");
 }
 
+export function artifactHash(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
 export function readUnsignedBundle(file) {
   const bundle = JSON.parse(readFileSync(file, "utf8"));
   assertUnsignedBundle(bundle);
+  return bundle;
+}
+
+export function parseSignedBundle(serialized) {
+  const bundle = JSON.parse(serialized);
+  if (!isRecord(bundle)) throw new TypeError("compatibility registry signed bundle must be an object");
+  const { signature, ...unsigned } = bundle;
+  assertUnsignedBundle(unsigned);
+  assertEd25519Signature(signature);
   return bundle;
 }
 
@@ -53,8 +114,19 @@ export function signBundle(bundle, privateKeyPem) {
   const key = createPrivateKey(privateKeyPem);
   if (key.asymmetricKeyType !== "ed25519") throw new TypeError("compatibility registry signing key must be Ed25519");
   const signed = { ...bundle };
-  return {
+  const result = {
     ...signed,
     signature: { algorithm: "ed25519", value: sign(null, Buffer.from(canonicalPayload(signed)), key).toString("base64") },
   };
+  if (
+    !verify(
+      null,
+      Buffer.from(canonicalPayload(result)),
+      createPublicKey(key),
+      Buffer.from(result.signature.value, "base64"),
+    )
+  ) {
+    throw new Error("compatibility registry generated signature failed verification");
+  }
+  return result;
 }

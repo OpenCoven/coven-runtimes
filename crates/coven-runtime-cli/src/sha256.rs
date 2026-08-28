@@ -34,15 +34,14 @@ pub fn sha256_hex(data: &[u8]) -> String {
 fn sha256(data: &[u8]) -> [u8; 32] {
     let mut h = H0;
 
-    let mut blocks = data.chunks_exact(64);
-    for block in blocks.by_ref() {
-        compress(&mut h, block.try_into().expect("chunk is 64 bytes"));
+    let (blocks, rem) = data.as_chunks::<64>();
+    for block in blocks {
+        compress(&mut h, block);
     }
 
     // Padding (append 0x80, zeros, then the 64-bit big-endian bit length) is
     // laid out in one or two fixed tail blocks, so the input is hashed in
     // place and never copied.
-    let rem = blocks.remainder();
     let bit_len = (data.len() as u64).wrapping_mul(8);
     let mut tail = [0u8; 64];
     tail[..rem.len()].copy_from_slice(rem);
@@ -65,7 +64,7 @@ fn sha256(data: &[u8]) -> [u8; 32] {
 /// One FIPS 180-4 compression round over a single 64-byte block.
 fn compress(h: &mut [u32; 8], block: &[u8; 64]) {
     let mut w = [0u32; 64];
-    for (i, word) in block.chunks_exact(4).enumerate() {
+    for (i, word) in block.as_chunks::<4>().0.iter().enumerate() {
         w[i] = u32::from_be_bytes([word[0], word[1], word[2], word[3]]);
     }
     for i in 16..64 {

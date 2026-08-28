@@ -1,9 +1,9 @@
 # Compatibility registry publisher
 
 `coven-runtimes` publishes the public, signed compatibility contracts used by
-Coven Cave’s OpenCode and Grok integrations. The publisher owns the private
-keys; Cave packages only public endpoints, public keys, and immutable
-sequence/hash checkpoints.
+Coven Cave’s OpenCode, Grok, and OpenClaw integrations. The publisher owns the
+private keys; Cave packages only public endpoints, public keys or rotation
+keyrings, and immutable sequence/hash checkpoints.
 
 ## Public endpoints
 
@@ -12,11 +12,13 @@ direct HTTPS documents (no redirects):
 
 - `https://opencoven.github.io/coven-runtimes/opencode/current.json`
 - `https://opencoven.github.io/coven-runtimes/grok/current.json`
+- `https://opencoven.github.io/coven-runtimes/openclaw/current.json`
 
 Every deployed source sequence is also preserved at
 `/<runtime>/<sequence>.json`. `current.json` is byte-identical to the latest
 sequence file. A signed update must use a strictly higher sequence; never
-rewrite an existing sequence file.
+rewrite an existing sequence file. OpenClaw follows the same immutable
+sequence contract as OpenCode and Grok.
 
 ## Key custody and deployment
 
@@ -25,36 +27,127 @@ this repository. Store exactly these environment secrets there:
 
 - `COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM`
 - `COMPATIBILITY_GROK_PRIVATE_KEY_PEM`
+- `COMPATIBILITY_OPENCLAW_PRIVATE_KEY_PEM`
 
 Each value is a distinct PEM-encoded Ed25519 private key. Generate and retain
 the keys in the organization-controlled secret manager before copying them to
 the protected environment. Do not commit them, place them in Coven Cave, add
-them to Cave Actions secrets, or print them in workflow logs.
+them to Cave Actions secrets, or print them in workflow logs. Private signing
+keys must never enter Cave, logs, issues, PR bodies, or published output.
 
 Enable GitHub Pages with the **GitHub Actions** source, then manually dispatch
 `Publish compatibility registry` only for a reviewed `main` commit. The
-workflow verifies source contracts before it signs them, uploads only `site/`,
-and deploys through the Pages environment.
+workflow verifies source contracts, hydrates the published history, signs only
+new sequences, uploads only `site/`, and deploys through the Pages environment.
+Before publishing an OpenClaw source contract, review it against Cave’s built-in
+OpenClaw payload so the publisher’s genesis or successor sequence matches the
+bounded Cave contract you intend to ship.
+
+### Historical hydration and key rotation
+
+Every publisher run starts with an empty staging tree and fetches the canonical
+HTTPS `checkpoints.json` from GitHub Pages with a fresh unguessable query value,
+`no-store` fetch semantics, and explicit no-cache request headers, without
+following a redirect. Those cache directives are best-effort only: the trust
+boundary is the protected publication-state ledger, not CDN freshness.
+Immutable sequence URLs remain stable and cacheable. The hydrator requires the
+checkpoint to match the exact tracked sequence and payload hash, then verifies
+the SHA-256 of every complete signed historical file before staging it. Missing
+or changed sequence files, stale or future checkpoints, redirects, network or
+TLS failures, malformed checkpoints, unknown runtimes, and non-success
+responses all fail closed before signing. A 404 from the cache-busted canonical
+`checkpoints.json` request also fails closed by default.
+
+This repository already has published OpenCode and Grok history, so the normal
+publisher workflow must never authorize bootstrap. A partial production
+checkpoint is valid only when it matches the tracked
+`registry/compatibility/publication-state.json` contract. That file records the
+exact published checkpoint plus the SHA-256 of every immutable signed sequence,
+alongside a disjoint, closed allowlist of runtimes authorized for one genesis
+publication. The publisher loads it automatically; there are no workflow or
+caller inputs that can weaken it. Every published runtime must match the tracked
+sequence, payload hash, and signed artifact bytes exactly. An absent runtime is
+accepted only when the file explicitly authorizes its genesis, and a
+genesis-authorized runtime must not already appear in the canonical checkpoints.
+
+This feature PR authorizes OpenClaw genesis once. OpenCode and Grok each have an
+exact sequence-one checkpoint and signed artifact hash, while OpenClaw is the
+sole authorized genesis runtime. Therefore a successful checkpoint response
+that omits, advances, or rolls back OpenCode or Grok fails before any history is
+signed, while the current omission of OpenClaw is accepted.
+
+Immediately after successful Pages deployment of OpenClaw sequence 1, open a
+follow-up state-finalization PR. In that PR, add OpenClaw sequence 1 to
+`publishedSequenceFloors`, `publishedCheckpoints`, and
+`publishedArtifactHashes`, then remove OpenClaw from genesis authorization.
+Merge it before dispatching the publisher again.
+Never leave a deployed runtime genesis-authorized.
+
+Never use bootstrap authorization for recovery from an outage, Pages
+misconfiguration, missing history, or a failed publication.
+
+Only a truly new Pages deployment with no published registry history may use
+the one-time CLI authorization:
+
+```sh
+node scripts/hydrate-compatibility-registry-site.mjs --allow-bootstrap-404
+```
+
+The flag authorizes only an actual 404 from the canonical `checkpoints.json`
+request. Redirects, network failures, malformed responses, and every other
+status remain fatal. Remove the flag immediately after the first publication;
+all later runs must use the normal bootstrap-disabled command.
+
+The hydrator verifies every historical file against its protected signed-file
+hash. The builder also validates its Ed25519 signature structure and binds each
+source directory to its payload runtime (`opencode`, `grok-build`, or
+`openclaw`). The hydrated unsigned canonical payload must match the reviewed
+source, and the latest payload hash must match its checkpoint. Existing
+sequence files are then preserved byte-for-byte; `current.json` copies the
+latest immutable file exactly, and checkpoints are regenerated from the
+preserved and newly signed bundles. Newly generated signatures are verified
+against the public key derived from the active private key before publication.
+
+This preservation rule is essential during a key rotation: replacing the
+current private key must never re-sign historical sequences or change their
+bytes. Add a higher reviewed source sequence for the new key. The publisher
+signs only that new sequence and carries all earlier signatures forward
+unchanged. Cave and the release guards still verify signatures with the packaged
+public keyrings; publisher hydration independently refuses any historical bytes
+that differ from the protected publication-state ledger.
 
 ## Cave release handoff
 
 For each runtime, export its PEM public key and read `site/checkpoints.json`.
-Set only these public Cave repository secrets:
+Set the three public Cave repository coordinates shown for each runtime:
 
 | Runtime | Endpoint secret | Public-key secret | Checkpoint secret |
 | --- | --- | --- | --- |
 | OpenCode | `OPENCODE_SCHEMA_REGISTRY_URL` | `OPENCODE_SCHEMA_REGISTRY_PUBLIC_KEY` | `OPENCODE_SCHEMA_REGISTRY_CHECKPOINT` |
 | Grok | `GROK_SCHEMA_REGISTRY_URL` | `GROK_SCHEMA_REGISTRY_PUBLIC_KEY` | `GROK_SCHEMA_REGISTRY_CHECKPOINT` |
+| OpenClaw | `OPENCLAW_SCHEMA_REGISTRY_URL` | `OPENCLAW_SCHEMA_REGISTRY_PUBLIC_KEY` | `OPENCLAW_SCHEMA_REGISTRY_CHECKPOINT` |
+
+The public-key column names the single-key baseline. During a rotation overlap,
+the optional plural `*_SCHEMA_REGISTRY_PUBLIC_KEYS` secret is the keyring
+alternative for that runtime; it is the only additional Cave release secret
+and still contains public verification material, never a signing key.
 
 The checkpoint is exactly `{ "sequence": <number>, "payloadHash":
 "<lowercase sha256>" }`. Sequence one is the pinned Cave baseline and has no
 `keyId`. During a later key rotation, add the selected `keyId` to the reviewed
 source for the higher sequence and use the corresponding `*_PUBLIC_KEYS`
 secret with one to four named keys. Retain the previous public key until all
-supported Cave releases have moved beyond it.
+supported Cave releases have moved beyond it. OpenClaw may therefore hand off
+either `OPENCLAW_SCHEMA_REGISTRY_PUBLIC_KEY` or the rotation keyring
+`OPENCLAW_SCHEMA_REGISTRY_PUBLIC_KEYS`, depending on whether the release is on
+a single active key or an overlap window.
 
-Before a Cave release, fetch both public endpoints without following redirects,
-verify their signatures with the public keys, compare their payload hashes to
-the checkpoints, and run Cave’s two release guard scripts. A missing key,
-non-HTTPS URL, redirect, invalid signature, expired bundle, or checkpoint
-mismatch is a release failure.
+Before a Cave release, fetch all three public endpoints without following
+redirects, verify their signatures with the corresponding public keys or
+keyrings, compare their payload hashes and sequences to the checkpoints, and
+run all three Cave release guard scripts:
+`check-opencode-registry-release.mjs`,
+`check-grok-registry-release.mjs`, and
+`check-openclaw-registry-release.mjs`. A missing key, non-HTTPS URL, redirect,
+invalid signature, expired bundle, or checkpoint mismatch is a release
+failure.

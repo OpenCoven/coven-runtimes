@@ -15,21 +15,25 @@ concurrency:
 jobs:
   build:
     name: Sign and build Pages site
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: compatibility-registry-publisher
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: main
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - name: Verify publisher contracts
         run: node scripts/compatibility-registry.test.mjs
+      - name: Hydrate immutable registry history
+        run: node scripts/hydrate-compatibility-registry-site.mjs
       - name: Build signed public registry
         env:
           COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM: ${{ secrets.COMPATIBILITY_OPENCODE_PRIVATE_KEY_PEM }}
           COMPATIBILITY_GROK_PRIVATE_KEY_PEM: ${{ secrets.COMPATIBILITY_GROK_PRIVATE_KEY_PEM }}
+          COMPATIBILITY_OPENCLAW_PRIVATE_KEY_PEM: ${{ secrets.COMPATIBILITY_OPENCLAW_PRIVATE_KEY_PEM }}
         run: node scripts/build-compatibility-registry-site.mjs
       - name: Upload public Pages artifact
         uses: actions/upload-pages-artifact@v3
